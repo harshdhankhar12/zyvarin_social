@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Edit2, Trash2, Calendar, CheckCircle, AlertCircle, Loader, Copy, Clock } from 'lucide-react'
+import { Edit2, Trash2, Calendar, CheckCircle, AlertCircle, Loader, Copy, Clock, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { formatDate } from '@/utils/formatDate'
 import { publishScheduledPost } from '@/app/actions/publishPost'
@@ -19,6 +19,8 @@ interface Post {
   errorMessage?: string
 }
 
+type FilterStatus = 'ALL' | 'POSTED' | 'SCHEDULED' | 'FAILED'
+
 export default function PostsManagement() {
   const [posts, setPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(true)
@@ -31,6 +33,7 @@ export default function PostsManagement() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [duplicationTime, setDuplicationTime] = useState<{ [key: string]: string }>({})
   const [showRescheduleModal, setShowRescheduleModal] = useState<string | null>(null)
+  const [filterStatus, setFilterStatus] = useState<FilterStatus>('ALL')
 
   useEffect(() => {
     fetchPosts()
@@ -238,6 +241,11 @@ export default function PostsManagement() {
     )
   }
 
+  const filteredPosts = filterStatus === 'ALL' ? posts : posts.filter(p => p.status === filterStatus)
+  const failedCount = posts.filter(p => p.status === 'FAILED').length
+  const scheduledCount = posts.filter(p => p.status === 'SCHEDULED').length
+  const postedCount = posts.filter(p => p.status === 'POSTED').length
+
   return (
     <div className="space-y-6">
       {message && (
@@ -249,6 +257,41 @@ export default function PostsManagement() {
       <div>
         <h1 className="text-3xl font-bold mb-2">Manage Posts</h1>
         <p className="text-gray-600">Edit, reschedule, or delete your posts</p>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={() => setFilterStatus('ALL')}
+          className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+            filterStatus === 'ALL' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
+        >
+          All ({posts.length})
+        </button>
+        <button
+          onClick={() => setFilterStatus('POSTED')}
+          className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+            filterStatus === 'POSTED' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
+        >
+          Posted ({postedCount})
+        </button>
+        <button
+          onClick={() => setFilterStatus('SCHEDULED')}
+          className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+            filterStatus === 'SCHEDULED' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
+        >
+          Scheduled ({scheduledCount})
+        </button>
+        <button
+          onClick={() => setFilterStatus('FAILED')}
+          className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+            filterStatus === 'FAILED' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
+        >
+          Failed ({failedCount})
+        </button>
       </div>
 
       {selectedPosts.size > 0 && (
@@ -283,12 +326,14 @@ export default function PostsManagement() {
       )}
 
       <div className="grid gap-4">
-        {posts.length === 0 ? (
+        {filteredPosts.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-gray-600">No posts found</p>
+            <p className="text-gray-600">
+              {filterStatus === 'ALL' ? 'No posts found' : `No ${filterStatus.toLowerCase()} posts found`}
+            </p>
           </div>
         ) : (
-          posts.map((post) => (
+          filteredPosts.map((post) => (
             <div key={post.id} className="border border-gray-200 rounded-lg p-4 hover:border-gray-300 transition">
               <div className="flex gap-4">
                 <input
@@ -309,18 +354,10 @@ export default function PostsManagement() {
                         rows={3}
                       />
                       <div className="flex gap-2">
-                        <Button
-                          onClick={() => handleEditPost(post.id)}
-                          disabled={actionLoading}
-                          size="sm"
-                        >
+                        <Button onClick={() => handleEditPost(post.id)} disabled={actionLoading} size="sm">
                           {actionLoading ? <Loader className="w-4 h-4 animate-spin" /> : 'Save'}
                         </Button>
-                        <Button
-                          onClick={() => setEditingPostId(null)}
-                          variant="outline"
-                          size="sm"
-                        >
+                        <Button onClick={() => setEditingPostId(null)} variant="outline" size="sm">
                           Cancel
                         </Button>
                       </div>
@@ -341,7 +378,7 @@ export default function PostsManagement() {
                               <button
                                 onClick={() => handlePublishNow(post.id)}
                                 disabled={publishing === post.id}
-                                className="px-2 py-1 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                className="px-2 py-1 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50 transition-colors"
                               >
                                 {publishing === post.id ? 'Publishing...' : 'Publish'}
                               </button>
@@ -359,6 +396,25 @@ export default function PostsManagement() {
                               >
                                 <Copy className="w-3 h-3" />
                                 Duplicate
+                              </button>
+                            </>
+                          )}
+                          {post.status === 'FAILED' && (
+                            <>
+                              <button
+                                onClick={() => handlePublishNow(post.id)}
+                                disabled={publishing === post.id}
+                                className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 transition-colors flex items-center gap-1"
+                              >
+                                <RefreshCw className="w-3 h-3" />
+                                {publishing === post.id ? 'Retrying...' : 'Retry Now'}
+                              </button>
+                              <button
+                                onClick={() => setShowRescheduleModal(post.id)}
+                                className="px-2 py-1 text-xs bg-orange-600 text-white rounded hover:bg-orange-700 transition-colors flex items-center gap-1"
+                              >
+                                <Clock className="w-3 h-3" />
+                                Reschedule
                               </button>
                             </>
                           )}
@@ -385,8 +441,15 @@ export default function PostsManagement() {
                         {post.status === 'POSTED' && post.postedAt && (
                           <span>Posted on {formatDate(new Date(post.postedAt))}</span>
                         )}
-                        {post.status === 'FAILED' && post.errorMessage && (
-                          <span>Error: {post.errorMessage}</span>
+                        {post.status === 'FAILED' && (
+                          <div className="space-y-1">
+                            {post.scheduledFor && (
+                              <div>Was scheduled for {formatDate(new Date(post.scheduledFor))}</div>
+                            )}
+                            {post.errorMessage && (
+                              <div className="text-red-600 font-medium">Error: {post.errorMessage}</div>
+                            )}
+                          </div>
                         )}
                       </div>
                     </>

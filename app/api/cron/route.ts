@@ -2,27 +2,42 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import axios from 'axios'
 
-async function publishPostServer(postId: string, platform: string, content: string, mediaUrls: string[]) {
+async function publishPostServer(postId: string, platform: string, content: string, mediaUrls: string[], userId: string) {
   const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000'
   let platformName = platform.toLowerCase()
   if (platformName === 'devto') platformName = 'dev_to'
 
-  const response = await axios.post(`${baseUrl}/api/social/${platformName}/post`, {
-    content: content.trim(),
-    mediaUrls,
-    postType: 'immediate',
-    scheduledFor: null,
-    postId: postId,
-    fromCron: true
-  })
-  
-  const data = response.data
-  const displayPlatform = platformName === 'dev_to' ? 'devto' : platformName
+  try {
+    const response = await axios.post(`${baseUrl}/api/social/${platformName}/post`, {
+      content: content.trim(),
+      mediaUrls,
+      postType: 'immediate',
+      scheduledFor: null,
+      postId: postId,
+      fromCron: true
+    }, {
+      headers: {
+        'X-User-ID': userId,
+        'Content-Type': 'application/json'
+      },
+      timeout: 30000
+    })
+    
+    const data = response.data
+    const displayPlatform = platformName === 'dev_to' ? 'devto' : platformName
 
-  return {
-    platform: displayPlatform,
-    success: data.success || false,
-    error: data.error || null
+    return {
+      platform: displayPlatform,
+      success: data.success || false,
+      error: data.error || null
+    }
+  } catch (error: any) {
+    console.error(`Error publishing to ${platform}:`, error.response?.data || error.message)
+    return {
+      platform: platform,
+      success: false,
+      error: error.response?.data?.error || error.message || 'Failed to publish'
+    }
   }
 }
 
@@ -309,7 +324,8 @@ export async function GET(req: NextRequest) {
           post.id,
           platform,
           post.content,
-          post.mediaUrls
+          post.mediaUrls,
+          post.socialProvider.user.id
         )
 
         if (result.success) {
