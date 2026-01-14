@@ -2,7 +2,7 @@
 
 import prisma from '@/lib/prisma'
 import { currentLoggedInUserInfo } from '@/utils/currentLogegdInUserInfo'
-import axios from 'axios'
+import { publishPostDirectly } from '@/lib/publishPostDirect'
 
 export async function publishScheduledPost(postId: string) {
   try {
@@ -27,51 +27,31 @@ export async function publishScheduledPost(postId: string) {
       return { success: false, error: 'Unauthorized' }
     }
 
-    const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000'
-    let platformName = post.socialProvider.provider.toLowerCase()
-    if (platformName === 'devto') platformName = 'dev_to'
+    const result = await publishPostDirectly(postId)
 
-    const response = await axios.post(`${baseUrl}/api/social/${platformName}/post`, {
-      content: post.content.trim(),
-      mediaUrls: post.mediaUrls,
-      postType: 'immediate',
-      scheduledFor: null,
-      postId: post.id,
-      fromCron: true,
-      userId: session.id
-    }, {
-      headers: {
-        'X-User-ID': session.id
-      }
-    })
-
-    const data = response.data
-
-    if (data.success) {
-      await prisma.post.update({
-        where: { id: postId },
-        data: {
-          status: 'POSTED',
-          postedAt: new Date(),
-          errorMessage: null
-        }
-      })
-
+    if (result.success) {
       return {
         success: true,
         message: 'Post published successfully'
       }
     } else {
+      await prisma.post.update({
+        where: { id: postId },
+        data: {
+          status: 'FAILED',
+          errorMessage: result.error || 'Unknown error'
+        }
+      })
       return {
         success: false,
-        error: data.error || 'Failed to publish post'
+        error: result.error || 'Failed to publish post'
       }
     }
   } catch (error: any) {
     console.error('Error publishing post:', error.message)
     return {
       success: false,
-      error: error.response?.data?.error || error.message || 'Failed to publish post'
+      error: error.message || 'Failed to publish post'
     }
   }
 }

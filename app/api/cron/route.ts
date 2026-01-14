@@ -1,45 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import axios from 'axios'
-
-async function publishPostServer(postId: string, platform: string, content: string, mediaUrls: string[], userId: string) {
-  const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000'
-  let platformName = platform.toLowerCase()
-  if (platformName === 'devto') platformName = 'dev_to'
-
-  try {
-    const response = await axios.post(`${baseUrl}/api/social/${platformName}/post`, {
-      content: content.trim(),
-      mediaUrls,
-      postType: 'immediate',
-      scheduledFor: null,
-      postId: postId,
-      fromCron: true
-    }, {
-      headers: {
-        'X-User-ID': userId,
-        'Content-Type': 'application/json'
-      },
-      timeout: 30000
-    })
-    
-    const data = response.data
-    const displayPlatform = platformName === 'dev_to' ? 'devto' : platformName
-
-    return {
-      platform: displayPlatform,
-      success: data.success || false,
-      error: data.error || null
-    }
-  } catch (error: any) {
-    console.error(`Error publishing to ${platform}:`, error.response?.data || error.message)
-    return {
-      platform: platform,
-      success: false,
-      error: error.response?.data?.error || error.message || 'Failed to publish'
-    }
-  }
-}
+import { publishPostDirectly } from '@/lib/publishPostDirect'
 
 async function handlePendingTransactions() {
   const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
@@ -319,31 +280,15 @@ export async function GET(req: NextRequest) {
     for (const post of scheduledPosts) {
       try {
         const platform = post.socialProvider.provider
-
-        const result = await publishPostServer(
-          post.id,
-          platform,
-          post.content,
-          post.mediaUrls,
-          post.socialProvider.user.id
-        )
+        const result = await publishPostDirectly(post.id)
 
         if (result.success) {
-          await prisma.post.update({
-            where: { id: post.id },
-            data: {
-              status: 'POSTED',
-              postedAt: new Date(),
-              errorMessage: null
-            }
-          })
-
           await prisma.notification.create({
             data: {
               userId: post.socialProvider.user.id,
               senderType: 'SYSTEM',
               title: '✅ Post Published Successfully',
-              message: `Your scheduled post was published to ${result.platform}`,
+              message: `Your scheduled post was published to ${platform}`,
               isRead: false
             }
           })
@@ -351,7 +296,7 @@ export async function GET(req: NextRequest) {
           results.success++
           results.details.push({
             postId: post.id,
-            platform: result.platform,
+            platform: platform,
             status: 'success'
           })
         } else {
@@ -368,7 +313,7 @@ export async function GET(req: NextRequest) {
               userId: post.socialProvider.user.id,
               senderType: 'SYSTEM',
               title: '❌ Post Publishing Failed',
-              message: `Failed to publish your scheduled post to ${result.platform}`,
+              message: `Failed to publish your scheduled post to ${platform}`,
               isRead: false
             }
           })
@@ -376,7 +321,7 @@ export async function GET(req: NextRequest) {
           results.failed++
           results.details.push({
             postId: post.id,
-            platform: result.platform,
+            platform: platform,
             status: 'failed',
             error: result.error
           })
