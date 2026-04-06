@@ -36,7 +36,7 @@ const SignInPage = () => {
       } else {
         setSuccess("Login Sucessfull. Redirecting to Dashboard...")
         setTimeout(() => {
-          router.push("/dashboard/user")
+          router.push("/dashboard")
         }, 1500)
       }
     } catch (error) {

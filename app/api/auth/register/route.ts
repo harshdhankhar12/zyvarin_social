@@ -1,17 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import bcrypt from "bcryptjs";
-import { rateLimiters, getIdentifier, checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
     try {
-        const identifier = getIdentifier(req, 'ip');
-        const { success, limit, remaining, reset } = await checkRateLimit(rateLimiters.register, identifier);
-        
-        if (!success) {
-            return rateLimitResponse(limit, remaining, reset);
-        }
-
         const { fullName, email, password } = await req.json();
 
         const sanitizedFullName = fullName?.trim() || '';
@@ -45,8 +37,8 @@ export async function POST(req: NextRequest) {
         const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(sanitizedPassword);
 
         if (!hasUpperCase || !hasLowerCase || !hasNumbers || !hasSpecialChar) {
-            return NextResponse.json({ 
-                error: 'Password must contain uppercase, lowercase, numbers, and special characters' 
+            return NextResponse.json({
+                error: 'Password must contain uppercase, lowercase, numbers, and special characters'
             }, { status: 400 });
         }
 
@@ -67,7 +59,7 @@ export async function POST(req: NextRequest) {
                 fullName: sanitizedFullName,
                 email: sanitizedEmail,
                 password: hashedPassword,
-                subscription_status : "ACTIVE"
+                subscription_status: "ACTIVE"
             },
         });
 

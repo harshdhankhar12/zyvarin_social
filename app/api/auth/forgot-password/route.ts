@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { sendMail } from "@/utils/mail";
 import bcrypt from "bcryptjs";
-import { rateLimiters, getIdentifier, checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 let otp = Math.floor(100000 + Math.random() * 900000).toString();
 let otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
@@ -19,13 +18,6 @@ export async function POST(req: NextRequest) {
         const { email } = await req.json();
         if (!email || email.trim() === '') {
             return NextResponse.json({ errror: "Email is Required" }, { status: 400 })
-        }
-
-        const identifier = getIdentifier(req, 'email', email);
-        const { success, limit, remaining, reset } = await checkRateLimit(rateLimiters.forgotPassword, identifier);
-        
-        if (!success) {
-            return rateLimitResponse(limit, remaining, reset);
         }
 
         const isEmailExists = await prisma.user.findUnique({

@@ -3,17 +3,17 @@ import { NextResponse, NextRequest } from "next/server"
 import prisma from "@/lib/prisma"
 import { canPublishPost } from "@/app/dashboard/pricingUtils"
 import { checkAndNotifyQuota } from "@/utils/quotaNotifications"
-import { incrementPostCount, checkRateLimit as checkPostRateLimit, getQuotaWarning } from "@/lib/quotaTracker"
+import { incrementPostCount, getQuotaWarning } from "@/lib/quotaTracker"
 
 export async function POST(request: NextRequest) {
   try {
     let session = await currentLoggedInUserInfo()
     const userIdHeader = request.headers.get('X-User-ID')
-    
+
     if (!session && userIdHeader) {
       session = { id: userIdHeader } as any
     }
-    
+
     if (!session || typeof session === 'boolean') {
       return NextResponse.json(
         { error: "Unauthorized" },
@@ -32,14 +32,14 @@ export async function POST(request: NextRequest) {
     }
 
     if (content.length > 500) {
-      return NextResponse.json({ 
-        error: "Pinterest descriptions are limited to 500 characters" 
+      return NextResponse.json({
+        error: "Pinterest descriptions are limited to 500 characters"
       }, { status: 400 })
     }
 
     if (!mediaUrls || mediaUrls.length === 0) {
-      return NextResponse.json({ 
-        error: "Pinterest posts require at least one image" 
+      return NextResponse.json({
+        error: "Pinterest posts require at least one image"
       }, { status: 400 })
     }
 
@@ -64,8 +64,8 @@ export async function POST(request: NextRequest) {
       });
 
       if (duplicatePost) {
-        return NextResponse.json({ 
-          error: "You have already scheduled or posted this content in the last 24 hours" 
+        return NextResponse.json({
+          error: "You have already scheduled or posted this content in the last 24 hours"
         }, { status: 400 });
       }
     }
@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
     }
 
     const isScheduled = postType === 'scheduled'
-    
+
     if (isScheduled && scheduledFor) {
       const post = await prisma.post.create({
         data: {
@@ -144,7 +144,7 @@ export async function POST(request: NextRequest) {
     }
 
     const boardsData = await boards.json()
-    
+
     if (!boardsData.items || boardsData.items.length === 0) {
       return NextResponse.json({ error: "No Pinterest boards found. Please create a board first." }, { status: 400 })
     }
@@ -173,8 +173,8 @@ export async function POST(request: NextRequest) {
     if (!createPinResponse.ok) {
       const errorData = await createPinResponse.json()
       console.error('Pinterest pin creation failed:', errorData)
-      return NextResponse.json({ 
-        error: errorData?.message || "Failed to create Pinterest pin" 
+      return NextResponse.json({
+        error: errorData?.message || "Failed to create Pinterest pin"
       }, { status: 400 })
     }
 

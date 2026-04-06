@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import axios from 'axios'
 import prisma from '@/lib/prisma'
 import { currentLoggedInUserInfo } from '@/utils/currentLogegdInUserInfo'
-import { rateLimiters, getIdentifier, checkRateLimit, rateLimitResponse } from '@/lib/rate-limit'
 
 export async function POST(req: NextRequest) {
   const session = await currentLoggedInUserInfo()
@@ -10,17 +9,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const identifier = getIdentifier(req, 'user', session.id);
-  const { success, limit, remaining, reset } = await checkRateLimit(rateLimiters.uploadImage, identifier);
-  
-  if (!success) {
-    return rateLimitResponse(limit, remaining, reset);
-  }
-
   try {
     const formData = await req.formData()
     const file = formData.get('image') as File
-    
+
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
@@ -44,7 +36,7 @@ export async function POST(req: NextRequest) {
 
 
     if (response.data.success) {
-      await prisma.user.update({  
+      await prisma.user.update({
         where: {
           email: session.email
         },
@@ -52,17 +44,17 @@ export async function POST(req: NextRequest) {
           avatarUrl: response.data.data.url
         }
       })
-      return NextResponse.json({ 
-        success: true, 
-        imageUrl: response.data.data.url 
+      return NextResponse.json({
+        success: true,
+        imageUrl: response.data.data.url
       })
     }
 
     return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
   } catch (error: any) {
     console.error('Upload error:', error)
-    return NextResponse.json({ 
-      error: error.response?.status === 413 ? 'File too large' : 'Upload failed' 
+    return NextResponse.json({
+      error: error.response?.status === 413 ? 'File too large' : 'Upload failed'
     }, { status: 500 })
   }
 }

@@ -22,11 +22,14 @@ const Sidebar = () => {
   const pathname = usePathname();
   const router = useRouter();
 
+  const aiIcon = '✨'
+
   const navItems = [
     { id: '/dashboard', icon: LayoutGrid, label: 'Home', priority: 'high' },
     { id: '/dashboard/calendar', icon: Calendar1Icon, label: 'Calendar', priority: 'high' },
     { id: '/dashboard/compose', icon: PenTool, label: 'Compose', priority: 'high' },
     { id: '/dashboard/posts', icon: ListTodo, label: 'Posts', priority: 'high' },
+    // { id: '/dashboard/chat', icon: SparklesIcon, label: 'Chat', priority: 'high' },
     { id: '/dashboard/analytics', icon: BarChart3, label: 'Analytics', priority: 'high' },
     { id: '/dashboard/connect-accounts', icon: Link2Icon, label: 'Connect Accounts', priority: 'high' },
     { id: '/dashboard/settings', icon: Settings, label: 'Settings', priority: 'high' },
@@ -52,22 +55,26 @@ const Sidebar = () => {
         <nav className="flex flex-col gap-2 mt-12">
           {navItems.map((item) => {
             const isActive = pathname === item.id;
-            
+
             return (
               <Link
                 key={item.id}
                 href={item.id}
-                prefetch={true} 
+                prefetch={true}
                 onMouseEnter={() => prefetchOnHover(item.id)}
                 onTouchStart={() => prefetchOnHover(item.id)}
-                className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all group relative ${
-                  isActive
-                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200'
-                    : 'text-slate-400 hover:bg-slate-100 hover:text-slate-600'
-                }`}
+                className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all group relative ${isActive
+                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200'
+                  : 'text-slate-400 hover:bg-slate-100 hover:text-slate-600'
+                  }`}
                 title={item.label}
               >
-                <item.icon className="w-5 h-5" />
+                {item.label === 'Chat' ? (<span className="text-2xl" aria-label="Chat">
+                  {aiIcon}
+                </span>
+                ) : (<item.icon className="w-5 h-5" />
+                )
+                }
                 {isActive && (
                   <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-indigo-600 -ml-4 rounded-r-full hidden md:block"></div>
                 )}

@@ -3,17 +3,17 @@ import { NextResponse, NextRequest } from "next/server"
 import prisma from "@/lib/prisma"
 import { canPublishPost } from "@/app/dashboard/pricingUtils"
 import { checkAndNotifyQuota } from "@/utils/quotaNotifications"
-import { incrementPostCount, checkRateLimit as checkPostRateLimit, getQuotaWarning } from "@/lib/quotaTracker"
+import { incrementPostCount, getQuotaWarning } from "@/lib/quotaTracker"
 
 export async function POST(request: NextRequest) {
   try {
     let session = await currentLoggedInUserInfo()
     const userIdHeader = request.headers.get('X-User-ID')
-    
+
     if (!session && userIdHeader) {
       session = { id: userIdHeader } as any
     }
-    
+
     if (!session || typeof session === 'boolean') {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
@@ -25,8 +25,8 @@ export async function POST(request: NextRequest) {
     }
 
     if (content.length > 280) {
-      return NextResponse.json({ 
-        error: "Twitter posts are limited to 280 characters" 
+      return NextResponse.json({
+        error: "Twitter posts are limited to 280 characters"
       }, { status: 400 })
     }
 
@@ -51,8 +51,8 @@ export async function POST(request: NextRequest) {
       });
 
       if (duplicatePost) {
-        return NextResponse.json({ 
-          error: "You have already scheduled or posted this content in the last 24 hours" 
+        return NextResponse.json({
+          error: "You have already scheduled or posted this content in the last 24 hours"
         }, { status: 400 });
       }
     }
@@ -98,13 +98,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Twitter not connected" }, { status: 400 })
     }
 
-    const rateCheck = await checkPostRateLimit(twitterProvider.id)
-    if (!rateCheck.allowed) {
-      return NextResponse.json({ error: rateCheck.message }, { status: 429 })
-    }
-
     const isScheduled = postType === 'scheduled'
-    
+
     if (isScheduled && scheduledFor) {
       const post = await prisma.post.create({
         data: {
@@ -133,14 +128,14 @@ export async function POST(request: NextRequest) {
       if (!twitterProvider.refresh_token) {
         await prisma.socialProvider.update({
           where: { id: twitterProvider.id },
-          data: { 
+          data: {
             isConnected: false,
             disconnectedAt: new Date()
           }
         })
-        
-        return NextResponse.json({ 
-          error: "Twitter token expired. Please reconnect." 
+
+        return NextResponse.json({
+          error: "Twitter token expired. Please reconnect."
         }, { status: 400 })
       }
 
@@ -162,19 +157,19 @@ export async function POST(request: NextRequest) {
       if (!refreshResponse.ok) {
         await prisma.socialProvider.update({
           where: { id: twitterProvider.id },
-          data: { 
+          data: {
             isConnected: false,
             disconnectedAt: new Date()
           }
         })
-        
-        return NextResponse.json({ 
-          error: "Twitter token expired. Please reconnect." 
+
+        return NextResponse.json({
+          error: "Twitter token expired. Please reconnect."
         }, { status: 400 })
       }
 
       const refreshData = await refreshResponse.json()
-      
+
       await prisma.socialProvider.update({
         where: { id: twitterProvider.id },
         data: {
@@ -252,7 +247,7 @@ export async function POST(request: NextRequest) {
 
     if (!tweetResponse.ok) {
       console.error('Twitter API error:', tweetText)
-      
+
       await prisma.post.create({
         data: {
           socialProviderId: updatedProvider.id,
@@ -307,8 +302,8 @@ export async function POST(request: NextRequest) {
 
     const warning = await getQuotaWarning(updatedProvider.id)
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       postId: post.id,
       tweetId,
       message: `Posted to Twitter successfully!`,
@@ -318,11 +313,11 @@ export async function POST(request: NextRequest) {
         remaining: warning.remaining,
       } : undefined
     })
-    
+
   } catch (error: any) {
     console.error('Twitter posting error:', error)
-    return NextResponse.json({ 
-      error: error.message || "Failed to post to Twitter" 
+    return NextResponse.json({
+      error: error.message || "Failed to post to Twitter"
     }, { status: 500 })
   }
 }

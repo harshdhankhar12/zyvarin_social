@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import Razorpay from "razorpay";
 import { currentLoggedInUserInfo } from "@/utils/currentLogegdInUserInfo";
 import prisma from "@/lib/prisma";
-import { rateLimiters, getIdentifier, checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 
 const key_id = process.env.RAZORPAY_KEY_ID as string;
@@ -19,76 +18,69 @@ const razorpay = new Razorpay({
 
 
 
-export async function POST(req: NextRequest){
-     const user = await currentLoggedInUserInfo();
-    if(!user){
+export async function POST(req: NextRequest) {
+    const user = await currentLoggedInUserInfo();
+    if (!user) {
         return NextResponse.json({
-            error : "UnAuthorized!"
-        }, {status : 401})
-    }
-
-    const identifier = getIdentifier(req, 'user', user.id);
-    const { success, limit, remaining, reset } = await checkRateLimit(rateLimiters.billingCreate, identifier);
-    
-    if (!success) {
-        return rateLimitResponse(limit, remaining, reset);
+            error: "UnAuthorized!"
+        }, { status: 401 })
     }
 
     try {
         const plans = ['FREE', 'CREATOR', 'PREMIUM'];
-        const {planId, price} = await req.json();
-        if(!plans.includes(planId)){
+        const { planId, price } = await req.json();
+        if (!plans.includes(planId)) {
             return NextResponse.json({
-                error : "Invalid Plan!"
-            }, {status : 400})
+                error: "Invalid Plan!"
+            }, { status: 400 })
         }
 
         const currency = "INR";
         let updatedAmount = price * 100;
         updatedAmount = updatedAmount + (updatedAmount * 0.18); // Adding 18% GST
         updatedAmount = Math.round(updatedAmount);
-          const options = {
+        const options = {
             amount: updatedAmount,
             currency,
             receipt: `receipt_${Date.now()}`,
         }
-        
+
         const order = await razorpay.orders.create(options);
 
         const payment = await prisma.transaction.create({
-            data : {
-                userId : user.id,
-                amount : updatedAmount / 100,
-                paymentMethod : "RAZORPAY",
+            data: {
+                userId: user.id,
+                amount: updatedAmount / 100,
+                paymentMethod: "RAZORPAY",
                 currency,
-                transactionDate : new Date(),
-                status : "PENDING",
-                additionalInfo : {
-                    orderId : order.id,
-                    planId,   
+                transactionDate: new Date(),
+                status: "PENDING",
+                additionalInfo: {
+                    orderId: order.id,
+                    planId,
                 }
             }
         })
 
         await prisma.invoice.create({
-            data : {
-                userId : user.id,
+            data: {
+                userId: user.id,
                 dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
-                invoiceNumber : `INV-${Date.now()}`,
-                invoiceStatus : "UNPAID",
-                issueDate : new Date(),
-                orderId : order.id,
-                paymentDate : new Date(),
-                itemDescription : `${planId} Plan Subscription`,
-                paymentGatewayId : order.id,
-                paymentMethod : "RAZORPAY",
-                paymentStatus : "PENDING",
-                plan : planId,
-                subTotal : price,
-                taxAmount : price * 0.18,
-                totalAmount : price + (price * 0.18),
+                invoiceNumber: `INV-${Date.now()}`,
+                invoiceStatus: "UNPAID",
+                issueDate: new Date(),
+                orderId: order.id,
+                paymentDate: new Date(),
+                itemDescription: `${planId} Plan Subscription`,
+                paymentGatewayId: order.id,
+                paymentMethod: "RAZORPAY",
+                paymentStatus: "PENDING",
+                plan: planId,
+                subTotal: price,
+                taxAmount: price * 0.18,
+                totalAmount: price + (price * 0.18),
                 currency,
-                itemQuantity : 1,          
+                itemQuantity: 1,
             }
         })
 
@@ -98,12 +90,12 @@ export async function POST(req: NextRequest){
             currency: order.currency,
             paymentId: payment!.id,
         }, { status: 200 });
-        
+
     } catch (error) {
-         console.log(error);
+        console.log(error);
         return NextResponse.json({
-            error : "Internal Server Error"
-        }, {status : 500})
-     
+            error: "Internal Server Error"
+        }, { status: 500 })
+
     }
 }

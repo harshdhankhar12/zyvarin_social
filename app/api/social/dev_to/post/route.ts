@@ -3,17 +3,17 @@ import { NextResponse, NextRequest } from "next/server"
 import prisma from "@/lib/prisma"
 import { canPublishPost } from "@/app/dashboard/pricingUtils"
 import { checkAndNotifyQuota } from "@/utils/quotaNotifications"
-import { incrementPostCount, checkRateLimit as checkPostRateLimit, getQuotaWarning } from "@/lib/quotaTracker"
+import { incrementPostCount, getQuotaWarning } from "@/lib/quotaTracker"
 
 export async function POST(request: NextRequest) {
   try {
     let session = await currentLoggedInUserInfo()
     const userIdHeader = request.headers.get('X-User-ID')
-    
+
     if (!session && userIdHeader) {
       session = { id: userIdHeader } as any
     }
-    
+
     if (!session || typeof session === 'boolean') {
       return NextResponse.json(
         { error: "Unauthorized" },
@@ -34,8 +34,8 @@ export async function POST(request: NextRequest) {
     const title = content.split('\n')[0].substring(0, 100) || "Untitled Article"
 
     if (content.length > 65535) {
-      return NextResponse.json({ 
-        error: "Dev.to articles are limited to 65535 characters" 
+      return NextResponse.json({
+        error: "Dev.to articles are limited to 65535 characters"
       }, { status: 400 })
     }
 
@@ -60,8 +60,8 @@ export async function POST(request: NextRequest) {
       });
 
       if (duplicatePost) {
-        return NextResponse.json({ 
-          error: "You have already scheduled or posted this content in the last 24 hours" 
+        return NextResponse.json({
+          error: "You have already scheduled or posted this content in the last 24 hours"
         }, { status: 400 });
       }
     }
@@ -101,13 +101,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Dev.to not connected" }, { status: 400 })
     }
 
-    const rateCheck = await checkPostRateLimit(devtoProvider.id)
-    if (!rateCheck.allowed) {
-      return NextResponse.json({ error: rateCheck.message }, { status: 429 })
-    }
-
     const isScheduled = postType === 'scheduled'
-    
+
     if (isScheduled && scheduledFor) {
       const post = await prisma.post.create({
         data: {
@@ -145,17 +140,17 @@ export async function POST(request: NextRequest) {
     }
 
     let processedContent = content
-    
+
     // Handle images by embedding them in the markdown
     if (mediaUrls.length > 0) {
       let imageMarkdown = "\n\n"
-      
+
       for (let i = 0; i < mediaUrls.length; i++) {
         const mediaUrl = mediaUrls[i]
         const alt = mediaAlts[i] || 'Image'
         imageMarkdown += `![${alt}](${mediaUrl})\n\n`
       }
-      
+
       processedContent = content + imageMarkdown
     }
 
@@ -192,7 +187,7 @@ export async function POST(request: NextRequest) {
           socialProviderId: devtoProvider.id,
           content,
           mediaUrls,
-          
+
           status: 'FAILED',
           errorMessage: `Dev.to API error: ${devtoResponse.statusText}`,
         }
@@ -207,24 +202,24 @@ export async function POST(request: NextRequest) {
 
     const post = postId
       ? await prisma.post.update({
-          where: { id: postId },
-          data: {
-            status: 'POSTED',
-            postedAt: new Date(),
-            platformPostId: devtoArticleId
-          }
-        })
+        where: { id: postId },
+        data: {
+          status: 'POSTED',
+          postedAt: new Date(),
+          platformPostId: devtoArticleId
+        }
+      })
       : await prisma.post.create({
-          data: {
-            socialProviderId: devtoProvider.id,
-            content,
-            mediaUrls,
-            status: isScheduled ? 'SCHEDULED' : 'POSTED',
-            scheduledFor: isScheduled && scheduledFor ? new Date(scheduledFor) : null,
-            postedAt: isScheduled ? null : new Date(),
-            platformPostId: devtoArticleId
-          }
-        })
+        data: {
+          socialProviderId: devtoProvider.id,
+          content,
+          mediaUrls,
+          status: isScheduled ? 'SCHEDULED' : 'POSTED',
+          scheduledFor: isScheduled && scheduledFor ? new Date(scheduledFor) : null,
+          postedAt: isScheduled ? null : new Date(),
+          platformPostId: devtoArticleId
+        }
+      })
 
     await prisma.socialProvider.update({
       where: { id: devtoProvider.id },

@@ -1,16 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import prisma from "@/lib/prisma"
 import { canConnectMorePlatforms } from "@/app/dashboard/pricingUtils"
-import { rateLimiters, getIdentifier, checkRateLimit, rateLimitResponse } from "@/lib/rate-limit"
 
 export async function GET(request: NextRequest) {
-  const identifier = getIdentifier(request, 'ip');
-  const { success, limit, remaining, reset } = await checkRateLimit(rateLimiters.oauthCallback, identifier);
-  
-  if (!success) {
-    return rateLimitResponse(limit, remaining, reset);
-  }
-
   try {
     const url = new URL(request.url)
     const code = url.searchParams.get('code')
@@ -70,7 +62,7 @@ export async function GET(request: NextRequest) {
     console.log('✅ Token received:', { access_token: access_token?.substring(0, 20) + '...' })
 
     const profileResponse = await fetch('https://api.linkedin.com/v2/userinfo', {
-      headers: { 
+      headers: {
         'Authorization': `Bearer ${access_token}`,
         'Content-Type': 'application/json'
       },
@@ -94,12 +86,12 @@ export async function GET(request: NextRequest) {
     if (!email) {
       try {
         const emailResponse = await fetch('https://api.linkedin.com/v2/emailAddress?q=members&projection=(elements*(handle~))', {
-          headers: { 
+          headers: {
             'Authorization': `Bearer ${access_token}`,
             'Content-Type': 'application/json'
           },
         })
-        
+
         if (emailResponse.ok) {
           const emailData = await emailResponse.json()
           email = emailData.elements?.[0]?.['handle~']?.emailAddress
@@ -139,7 +131,7 @@ export async function GET(request: NextRequest) {
       where: {
         provider_providerAccountId: {
           provider: 'linkedin',
-          providerAccountId: profileData.sub, 
+          providerAccountId: profileData.sub,
         },
       },
       update: {
@@ -155,7 +147,7 @@ export async function GET(request: NextRequest) {
       },
       create: {
         provider: 'linkedin',
-        providerAccountId: profileData.sub, 
+        providerAccountId: profileData.sub,
         providerUserId: profileData.sub,
         userId: userId,
         access_token: access_token,
@@ -171,15 +163,15 @@ export async function GET(request: NextRequest) {
     })
 
     return NextResponse.redirect(`${baseUrl}/dashboard/connect-accounts?success=linkedin_connected`)
-    
+
   } catch (error) {
     console.error('❌ LinkedIn callback error:', error)
-    
+
     if (error instanceof Error) {
       console.error('Error name:', error.name)
       console.error('Error message:', error.message)
     }
-    
+
     const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000'
     return NextResponse.redirect(`${baseUrl}/dashboard/connect-accounts?error=connection_failed`)
   }

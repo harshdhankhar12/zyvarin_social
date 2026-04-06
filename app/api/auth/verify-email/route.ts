@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { sendMail } from "@/utils/mail";
-import { rateLimiters, getIdentifier, checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 let otp = Math.floor(100000 + Math.random() * 900000).toString();
 let otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
@@ -19,13 +18,6 @@ export async function POST(req: NextRequest) {
         const { email } = await req.json();
         if (!email || email.trim() === '') {
             return NextResponse.json({ errror: "Email is Required" }, { status: 400 })
-        }
-
-        const identifier = getIdentifier(req, 'email', email);
-        const { success, limit, remaining, reset } = await checkRateLimit(rateLimiters.verifyEmail, identifier);
-        
-        if (!success) {
-            return rateLimitResponse(limit, remaining, reset);
         }
 
         const isEmailExists = await prisma.user.findUnique({
@@ -189,11 +181,11 @@ export async function PATCH(req: NextRequest) {
                 });
 
                 await prisma.notification.create({
-                    data : {
-                        userId : user.id,
-                        senderType : "ADMIN",
-                        title : "Welcome to Zyvarin Social! 🎉",
-                        message : "Hi "+ user.fullName +", we're excited to have you on board. Start exploring and connecting with Zyvarin Social today!",
+                    data: {
+                        userId: user.id,
+                        senderType: "ADMIN",
+                        title: "Welcome to Zyvarin Social! 🎉",
+                        message: "Hi " + user.fullName + ", we're excited to have you on board. Start exploring and connecting with Zyvarin Social today!",
                     }
                 })
 

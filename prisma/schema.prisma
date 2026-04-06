@@ -44,6 +44,7 @@ model User {
   updatedAt           DateTime           @updatedAt
   socialProviders     SocialProvider[]
   aiUsages            AI_Usage[]
+  aiChatDailyUsages   AIChatDailyUsage[]
   notifications       Notification[]
   invoices            Invoice[]
   transactions        Transaction[]
@@ -189,6 +190,22 @@ model AI_Usage {
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+}
+
+model AIChatDailyUsage {
+  id        String   @id @default(cuid())
+  userId    String
+  usageDate DateTime
+  timezone  String?
+  count     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, usageDate])
+  @@index([userId])
+  @@index([usageDate])
 }
 
 enum SubscriptionPlan {

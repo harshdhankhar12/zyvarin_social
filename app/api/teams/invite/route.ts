@@ -2,20 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { currentLoggedInUserInfo } from "@/utils/currentLogegdInUserInfo";
 import { sendMail } from "@/utils/mail";
-import { rateLimiters, getIdentifier, checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { canManageMembers } from "@/utils/teamUtils";
 
 export async function POST(req: NextRequest) {
   const session = await currentLoggedInUserInfo();
   if (!session || typeof session === 'boolean') {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const identifier = getIdentifier(req, 'user', session.id);
-  const rateCheck = await checkRateLimit(rateLimiters.teamInvite, identifier);
-  
-  if (!rateCheck.success) {
-    return rateLimitResponse(rateCheck.limit, rateCheck.remaining, rateCheck.reset);
   }
 
   try {
@@ -187,7 +179,7 @@ export async function POST(req: NextRequest) {
       }
     });
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       message: "Invitation sent successfully",
       expiresAt: expiresAt.toISOString()
     }, { status: 200 });

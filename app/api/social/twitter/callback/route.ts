@@ -2,16 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import prisma from "@/lib/prisma"
 import { cookies } from 'next/headers'
 import { canConnectMorePlatforms } from "@/app/dashboard/pricingUtils"
-import { rateLimiters, getIdentifier, checkRateLimit, rateLimitResponse } from "@/lib/rate-limit"
 
 export async function GET(request: NextRequest) {
-  const identifier = getIdentifier(request, 'ip');
-  const { success, limit, remaining, reset } = await checkRateLimit(rateLimiters.oauthCallback, identifier);
-  
-  if (!success) {
-    return rateLimitResponse(limit, remaining, reset);
-  }
-
   try {
     const url = new URL(request.url)
     const code = url.searchParams.get('code')
@@ -33,7 +25,7 @@ export async function GET(request: NextRequest) {
 
     let userId: string
     let codeVerifier: string
-    
+
     try {
       const decodedState = decodeURIComponent(state)
       const stateData = JSON.parse(Buffer.from(decodedState, 'base64').toString())
@@ -104,7 +96,7 @@ export async function GET(request: NextRequest) {
           'Content-Type': 'application/json'
         },
       })
-      
+
       if (usernameResponse.ok) {
         const usernameData = await usernameResponse.json()
         username = usernameData.data.username
@@ -175,17 +167,17 @@ export async function GET(request: NextRequest) {
     })
     const response = NextResponse.redirect(`${baseUrl}/dashboard/connect-accounts?success=x_connected`)
     response.cookies.delete('twitter_code_verifier')
-    
+
     return response
-    
+
   } catch (error) {
     console.error(' X callback error:', error)
-    
+
     if (error instanceof Error) {
       console.error('Error name:', error.name)
       console.error('Error message:', error.message)
     }
-    
+
     const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000'
     return NextResponse.redirect(`${baseUrl}/dashboard/connect-accounts?error=twitter_connection_failed`)
   }

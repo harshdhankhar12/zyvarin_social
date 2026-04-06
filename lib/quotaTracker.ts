@@ -112,39 +112,6 @@ export async function checkQuotaBeforePublish(providerId: string): Promise<{ all
   }
 }
 
-export async function checkRateLimit(providerId: string): Promise<{ allowed: boolean; message?: string; waitTime?: number }> {
-  try {
-    const data = await prisma.$queryRaw<any[]>`
-      SELECT "lastUsedAt"
-      FROM "SocialProvider"
-      WHERE id = ${providerId}
-    `
-
-    if (!data || data.length === 0) {
-      return { allowed: false, message: 'Provider not found' }
-    }
-
-    const lastUsed = data[0].lastUsedAt
-    if (!lastUsed) {
-      return { allowed: true }
-    }
-
-    const lastUsedTime = new Date(lastUsed).getTime()
-    const now = new Date().getTime()
-    const diffSeconds = (now - lastUsedTime) / 1000
-
-    if (diffSeconds < 30) {
-      const waitTime = Math.ceil(30 - diffSeconds)
-      return { allowed: false, message: `Please wait ${waitTime} second${waitTime !== 1 ? 's' : ''} before posting again`, waitTime }
-    }
-
-    return { allowed: true }
-  } catch (error) {
-    console.error('Error checking rate limit:', error)
-    return { allowed: false, message: 'Failed to check rate limit' }
-  }
-}
-
 export async function resetMonthlyQuota(userId: string) {
   try {
     await prisma.$executeRaw`

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { currentLoggedInUserInfo } from "@/utils/currentLogegdInUserInfo";
 import { sendMail } from "@/utils/mail";
-import { rateLimiters, getIdentifier, checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 type OtpRecord = {
     otp: string;
@@ -15,8 +14,8 @@ const otpStore = new Map<string, OtpRecord>();
 
 
 
-export async function POST(req: NextRequest){
-    const session =  await currentLoggedInUserInfo();
+export async function POST(req: NextRequest) {
+    const session = await currentLoggedInUserInfo();
     if (!session || typeof session === 'boolean') {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -24,17 +23,17 @@ export async function POST(req: NextRequest){
     const userEmail = session.email;
 
     try {
-        const {teamId} = await req.json();
+        const { teamId } = await req.json();
 
-        if(!teamId || teamId.trim().length === 0){
+        if (!teamId || teamId.trim().length === 0) {
             return NextResponse.json({ error: "Team ID is required" }, { status: 400 });
         }
 
         const team = await prisma.team.findUnique({
-            where : { id : teamId }
+            where: { id: teamId }
         });
 
-        if(!team){
+        if (!team) {
             return NextResponse.json({ error: "Team not found" }, { status: 404 });
         }
 
@@ -170,7 +169,7 @@ export async function POST(req: NextRequest){
 export async function PATCH(req: NextRequest) {
     try {
         const { otp } = await req.json();
-        const session =  await currentLoggedInUserInfo();
+        const session = await currentLoggedInUserInfo();
         if (!session || typeof session === 'boolean') {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
@@ -197,11 +196,11 @@ export async function PATCH(req: NextRequest) {
         }
 
         const teamInfo = await prisma.team.findUnique({
-            where : {
-                id : teamId
+            where: {
+                id: teamId
             },
-            select : {
-                name : true,
+            select: {
+                name: true,
                 ownerId: true,
             }
         });
@@ -216,32 +215,32 @@ export async function PATCH(req: NextRequest) {
         }
 
         await prisma.team.update({
-            where : {
-                id : teamId,
-                ownerId : session.id
+            where: {
+                id: teamId,
+                ownerId: session.id
             },
-            data : {
-                isVerified : true,
-                status : "ACTIVE"
+            data: {
+                isVerified: true,
+                status: "ACTIVE"
             }
         });
-        
+
         await prisma.notification.create({
-            data : {
-                userId : session.id,
-                senderType : "SYSTEM",
-                title : "Team Creation Verified",
-                message : `You have successfully verified your team "${teamInfo?.name}". You can now start adding members and managing your team settings.`,
-                type : "TEAM"
+            data: {
+                userId: session.id,
+                senderType: "SYSTEM",
+                title: "Team Creation Verified",
+                message: `You have successfully verified your team "${teamInfo?.name}". You can now start adding members and managing your team settings.`,
+                type: "TEAM"
             }
         })
 
         await prisma.teamAuditLog.create({
-            data : {
-                teamId : teamId,
-                action : "TEAM_VERIFIED",
-                userId : session.id,
-                details : `Welcome to your new team "${teamInfo?.name}"! Your team has been successfully verified. You can now start adding members, assigning roles, and managing your team's social media accounts. Enjoy collaborating and growing together!`
+            data: {
+                teamId: teamId,
+                action: "TEAM_VERIFIED",
+                userId: session.id,
+                details: `Welcome to your new team "${teamInfo?.name}"! Your team has been successfully verified. You can now start adding members, assigning roles, and managing your team's social media accounts. Enjoy collaborating and growing together!`
             }
         })
 

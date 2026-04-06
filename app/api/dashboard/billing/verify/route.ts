@@ -3,20 +3,12 @@ import { currentLoggedInUserInfo } from "@/utils/currentLogegdInUserInfo";
 import crypto from "crypto";
 import prisma from "@/lib/prisma";
 import { sendMail } from "@/utils/mail";
-import { rateLimiters, getIdentifier, checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   try {
     const user = await currentLoggedInUserInfo();
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const identifier = getIdentifier(req, 'user', user.id);
-    const { success, limit, remaining, reset } = await checkRateLimit(rateLimiters.billingVerify, identifier);
-    
-    if (!success) {
-      return rateLimitResponse(limit, remaining, reset);
     }
 
     const {
@@ -77,7 +69,7 @@ export async function POST(req: NextRequest) {
 
 
     const invoice = await prisma.invoice.findFirst({
-      where: { 
+      where: {
         userId: user.id,
         paymentGatewayId: razorpay_order_id,
         invoiceStatus: "UNPAID"
@@ -122,7 +114,7 @@ export async function POST(req: NextRequest) {
 
     await prisma.user.update({
       where: { id: user.id },
-      data: { 
+      data: {
         subscription_plan: planId,
         next_billing_date: nextBillingDate,
       },
@@ -341,9 +333,9 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error("Error verifying payment:", error);
     return NextResponse.json(
-      { 
+      {
         error: "Internal Server Error",
-        success: false 
+        success: false
       },
       { status: 500 }
     );

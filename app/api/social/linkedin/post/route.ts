@@ -3,10 +3,10 @@ import { NextResponse, NextRequest } from "next/server"
 import prisma from "@/lib/prisma"
 import { canPublishPost } from "@/app/dashboard/pricingUtils"
 import { checkAndNotifyQuota } from "@/utils/quotaNotifications"
-import { incrementPostCount, checkRateLimit as checkPostRateLimit, getQuotaWarning } from "@/lib/quotaTracker"
+import { incrementPostCount, getQuotaWarning } from "@/lib/quotaTracker"
 
 async function uploadImageToLinkedin(
-  imageUrl: string, 
+  imageUrl: string,
   accessToken: string,
   providerUserId: string | null,
 ): Promise<string | null> {
@@ -70,11 +70,11 @@ export async function POST(request: NextRequest) {
   try {
     let session = await currentLoggedInUserInfo()
     const userIdHeader = request.headers.get('X-User-ID')
-    
+
     if (!session && userIdHeader) {
       session = { id: userIdHeader } as any
     }
-    
+
     if (!session || typeof session === 'boolean') {
       return NextResponse.json(
         { error: "Unauthorized" },
@@ -89,8 +89,8 @@ export async function POST(request: NextRequest) {
     }
 
     if (content.length > 3000) {
-      return NextResponse.json({ 
-        error: "LinkedIn posts are limited to 3000 characters" 
+      return NextResponse.json({
+        error: "LinkedIn posts are limited to 3000 characters"
       }, { status: 400 })
     }
 
@@ -115,8 +115,8 @@ export async function POST(request: NextRequest) {
       });
 
       if (duplicatePost) {
-        return NextResponse.json({ 
-          error: "You have already scheduled or posted this content in the last 24 hours" 
+        return NextResponse.json({
+          error: "You have already scheduled or posted this content in the last 24 hours"
         }, { status: 400 });
       }
     }
@@ -162,13 +162,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "LinkedIn not connected" }, { status: 400 })
     }
 
-    const rateCheck = await checkPostRateLimit(linkedinProvider.id)
-    if (!rateCheck.allowed) {
-      return NextResponse.json({ error: rateCheck.message }, { status: 429 })
-    }
-
     const isScheduled = postType === 'scheduled'
-    
+
     if (isScheduled && scheduledFor) {
       const post = await prisma.post.create({
         data: {
@@ -227,12 +222,12 @@ export async function POST(request: NextRequest) {
       const assets: string[] = []
       let uploadFailed = false
       let uploadError = ""
-      
+
       for (const mediaUrl of mediaUrls) {
         try {
           const asset = await uploadImageToLinkedin(
-            mediaUrl, 
-            linkedinProvider.access_token, 
+            mediaUrl,
+            linkedinProvider.access_token,
             linkedinProvider?.providerUserId
           )
           if (asset) {

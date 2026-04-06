@@ -1,45 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
-import {GoogleGenAI} from '@google/genai';
+import { GoogleGenAI } from '@google/genai';
 import { currentLoggedInUserInfo } from "@/utils/currentLogegdInUserInfo";
 import prisma from "@/lib/prisma";
 import { canCreateAIContent } from "@/app/dashboard/pricingUtils";
-import { rateLimiters, getIdentifier, checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { checkAndNotifyQuota } from "@/utils/quotaNotifications";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
-const ai = new GoogleGenAI({apiKey: GEMINI_API_KEY});
+const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
-export async function POST(req: NextRequest){
-    const session = await currentLoggedInUserInfo();
-    if(!session){
-        return NextResponse.json({error: 'Unauthorized'}, {status: 401});
-    }
+export async function POST(req: NextRequest) {
+  const session = await currentLoggedInUserInfo();
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
-    const identifier = getIdentifier(req, 'user', session.id);
-    const { success, limit, remaining, reset } = await checkRateLimit(rateLimiters.aiGeneration, identifier);
-    
-    if (!success) {
-        return rateLimitResponse(limit, remaining, reset);
-    }
+  const user = await prisma.user.findUnique({
+    where: { id: session.id }
+  });
 
-    const user = await prisma.user.findUnique({
-        where: {id: session.id}
-    });
+  if (!user) {
+    return NextResponse.json({ error: 'User not found' }, { status: 404 });
+  }
 
-    if(!user) {
-        return NextResponse.json({error: 'User not found'}, {status: 404});
-    }
+  const hasQuota = await canCreateAIContent(user.id);
+  if (!hasQuota) {
+    return NextResponse.json({ error: 'AI generation quota reached for this month' }, { status: 403 });
+  }
 
-    const hasQuota = await canCreateAIContent(user.id);
-    if(!hasQuota) {
-        return NextResponse.json({error: 'AI generation quota reached for this month'}, {status: 403});
-    }
+  try {
+    const { content, selectedPlatforms, enhancements } = await req.json();
 
-    try {
-        const {content, selectedPlatforms, enhancements} = await req.json();
-
-        const prompt = `
+    const prompt = `
 You are an expert social media strategist with human-like creativity and emotional intelligence. Analyze the user's content and generate platform-specific variations that feel authentic, engaging, and tailored to each platform's unique audience and constraints.
 
 USER INPUT:
@@ -109,33 +101,33 @@ IMPORTANT:
 - No markdown, no explanations, only JSON
         `;
 
-        const response = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: [
-            {
-              role: 'user',
-              parts: [{ text: prompt }]
-            }
-          ]
-        });
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: prompt }]
+        }
+      ]
+    });
 
-        const aiResponse = response.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        const cleanedMessage = aiResponse.replace(/```json|```/g, '').trim();
-        const parsedResponse = JSON.parse(cleanedMessage);
+    const aiResponse = response.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const cleanedMessage = aiResponse.replace(/```json|```/g, '').trim();
+    const parsedResponse = JSON.parse(cleanedMessage);
 
-        await prisma.aI_Usage.create({
-            data: {
-                userId: user?.id || '',
-                type: "COMPOSE_POST_PREVIEW",
-                enhancement_types: enhancements,
-                platforms_enhanced: selectedPlatforms,
-                
-            }
-        });
+    await prisma.aI_Usage.create({
+      data: {
+        userId: user?.id || '',
+        type: "COMPOSE_POST_PREVIEW",
+        enhancement_types: enhancements,
+        platforms_enhanced: selectedPlatforms,
 
-        return NextResponse.json({suggestions: parsedResponse});
-      } catch (error: any) {
-        console.error('AI compose preview error:', error);
-        return NextResponse.json({ error: 'Failed to generate suggestions' }, { status: 500 });
       }
+    });
+
+    return NextResponse.json({ suggestions: parsedResponse });
+  } catch (error: any) {
+    console.error('AI compose preview error:', error);
+    return NextResponse.json({ error: 'Failed to generate suggestions' }, { status: 500 });
+  }
 }
