@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import Razorpay from "razorpay";
 import { currentLoggedInUserInfo } from "@/utils/currentLogegdInUserInfo";
 import prisma from "@/lib/prisma";
-
+import { redis } from "@/utils/redis";
+import { rateLimit } from "@/utils/rateLimiter";
+import { getClientIp } from "@/utils/ip";
 
 const key_id = process.env.RAZORPAY_KEY_ID as string;
 const key_secret = process.env.RAZORPAY_SECRET as string;
@@ -16,14 +18,33 @@ const razorpay = new Razorpay({
     key_secret
 })
 
-
-
 export async function POST(req: NextRequest) {
     const user = await currentLoggedInUserInfo();
     if (!user) {
         return NextResponse.json({
             error: "UnAuthorized!"
         }, { status: 401 })
+    }
+
+    const clientIp = getClientIp(req);
+    const userKey = `rl:purchase_plan:user:${user.id}`;
+    const userAllowed = await rateLimit({ key: userKey, limit: 5, windowSeconds: 300 });
+
+    if (!userAllowed) {
+        return NextResponse.json(
+            { error: `Too many purchase requests. Try again in ${await redis.ttl(userKey)} seconds.` },
+            { status: 429 }
+        );
+    }
+
+    const ipKey = `rl:purchase_plan:ip:${clientIp}`;
+    const ipAllowed = await rateLimit({ key: ipKey, limit: 15, windowSeconds: 300 });
+
+    if (!ipAllowed) {
+        return NextResponse.json(
+            { error: `Too many requests from this IP. Try again in ${await redis.ttl(ipKey)} seconds.` },
+            { status: 429 }
+        );
     }
 
     try {

@@ -26,7 +26,9 @@ export async function middleware(req: NextRequest) {
       }
     }
   } catch (error) {
-    return NextResponse.next()
+    const maintenanceUrl = req.nextUrl.clone()
+    maintenanceUrl.pathname = '/maintenance'
+    return NextResponse.redirect(maintenanceUrl)
   }
 
   return NextResponse.next()

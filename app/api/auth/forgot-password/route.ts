@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { sendMail } from "@/utils/mail";
 import bcrypt from "bcryptjs";
+import { redis } from "@/utils/redis";
+import { rateLimit } from "@/utils/rateLimiter";
+import { getClientIp } from "@/utils/ip";
 
 let otp = Math.floor(100000 + Math.random() * 900000).toString();
 let otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
@@ -20,8 +23,25 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ errror: "Email is Required" }, { status: 400 })
         }
 
+        const normalizedEmail = String(email ?? "").trim().toLowerCase();
+
+        const clientIp = getClientIp(req);
+        const emailKey = `rl:forgot_password:email:${normalizedEmail}`;
+        const emailAllowed = await rateLimit({ key: emailKey, limit: 3, windowSeconds: 300 });
+
+        if (!emailAllowed) {
+            return NextResponse.json({ error: `Too many password reset requests for this email. Try again in ${await redis.ttl(emailKey)} seconds.` }, { status: 429 });
+        }
+
+        const ipKey = `rl:forgot_password:ip:${clientIp}`;
+        const ipAllowed = await rateLimit({ key: ipKey, limit: 10, windowSeconds: 300 });
+
+        if (!ipAllowed) {
+            return NextResponse.json({ error: `Too many password reset requests from this IP. Try again in ${await redis.ttl(ipKey)} seconds.` }, { status: 429 });
+        }
+
         const isEmailExists = await prisma.user.findUnique({
-            where: { email }
+            where: { email: normalizedEmail }
         })
         if (!isEmailExists) {
             return NextResponse.json({ error: "Email Not Exists. Use another Email." }, { status: 400 });

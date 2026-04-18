@@ -9,6 +9,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const { redis } = await import("@/utils/redis");
+    const { rateLimit } = await import("@/utils/rateLimiter");
+    const { getClientIp } = await import("@/utils/ip");
+
+    const clientIp = getClientIp(req);
+    const userKey = `rl:create_comment:user:${session.id}`;
+    const userAllowed = await rateLimit({ key: userKey, limit: 20, windowSeconds: 300 });
+
+    if (!userAllowed) {
+      return NextResponse.json(
+        { error: `Too many comment requests. Try again in ${await redis.ttl(userKey)} seconds.` },
+        { status: 429 }
+      );
+    }
+
+    const ipKey = `rl:create_comment:ip:${clientIp}`;
+    const ipAllowed = await rateLimit({ key: ipKey, limit: 50, windowSeconds: 300 });
+
+    if (!ipAllowed) {
+      return NextResponse.json(
+        { error: `Too many requests from this IP. Try again in ${await redis.ttl(ipKey)} seconds.` },
+        { status: 429 }
+      );
+    }
+
     const { blogId, content } = await req.json();
 
     if (!blogId || !content?.trim()) {
@@ -96,6 +121,31 @@ export async function DELETE(req: NextRequest) {
     const session = await currentLoggedInUserInfo();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { redis } = await import("@/utils/redis");
+    const { rateLimit } = await import("@/utils/rateLimiter");
+    const { getClientIp } = await import("@/utils/ip");
+
+    const clientIp = getClientIp(req);
+    const userKey = `rl:delete_comment:user:${session.id}`;
+    const userAllowed = await rateLimit({ key: userKey, limit: 15, windowSeconds: 300 });
+
+    if (!userAllowed) {
+      return NextResponse.json(
+        { error: `Too many delete requests. Try again in ${await redis.ttl(userKey)} seconds.` },
+        { status: 429 }
+      );
+    }
+
+    const ipKey = `rl:delete_comment:ip:${clientIp}`;
+    const ipAllowed = await rateLimit({ key: ipKey, limit: 40, windowSeconds: 300 });
+
+    if (!ipAllowed) {
+      return NextResponse.json(
+        { error: `Too many requests from this IP. Try again in ${await redis.ttl(ipKey)} seconds.` },
+        { status: 429 }
+      );
     }
 
     const { searchParams } = new URL(req.url);

@@ -1,8 +1,44 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { currentLoggedInUserInfo } from '@/utils/currentLogegdInUserInfo'
+import { redis } from '@/utils/redis'
+import { buildMaintenanceEmail } from '@/utils/maintenanceMail'
+import { sendMail } from '@/utils/mail'
 
 const allowedStatuses = ['SCHEDULED', 'ONGOING', 'COMPLETED', 'CANCELED']
+const activeCacheKey = 'cache:maintenance:active'
+
+const invalidateMaintenanceCache = async () => {
+  await redis.del(activeCacheKey)
+}
+
+const notifyAllUsers = async (
+  type: 'scheduled' | 'started' | 'completed' | 'canceled',
+  maintenance: { title: string; message?: string | null; startsAt: Date; endsAt?: Date | null }
+) => {
+  const users = await prisma.user.findMany({
+    select: { email: true }
+  })
+
+  const email = buildMaintenanceEmail({
+    type,
+    title: maintenance.title,
+    message: maintenance.message,
+    startsAt: maintenance.startsAt,
+    endsAt: maintenance.endsAt,
+    baseUrl: process.env.NEXTAUTH_URL || ''
+  })
+
+  await Promise.all(
+    users.map(user =>
+      sendMail({
+        to: user.email,
+        subject: email.subject,
+        htmlContent: email.htmlContent
+      }).catch(() => null)
+    )
+  )
+}
 
 export async function GET() {
   const user = await currentLoggedInUserInfo()
@@ -33,7 +69,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid status' }, { status: 400 })
   }
 
-  const startDate = new Date(startsAt)
+  const normalizedStatus = status as 'SCHEDULED' | 'ONGOING' | 'COMPLETED' | 'CANCELED'
+  const startDate = normalizedStatus === 'ONGOING' ? new Date() : new Date(startsAt)
   const endDate = endsAt ? new Date(endsAt) : null
 
   if (Number.isNaN(startDate.getTime())) {
@@ -52,66 +89,22 @@ export async function POST(req: NextRequest) {
     data: {
       title: title.trim(),
       message: message?.trim() || null,
-      status,
+      status: normalizedStatus,
       startsAt: startDate,
       endsAt: endDate,
       createdById: user.id
     }
   })
 
-  const users = await prisma.user.findMany({
-    select: { email: true, fullName: true }
-  })
+  await invalidateMaintenanceCache()
 
-  const { sendMail } = await import('@/utils/mail')
-  const startText = startDate.toLocaleString()
-  const endText = endDate ? endDate.toLocaleString() : 'Until further notice'
-  const subject = status === 'ONGOING' ? 'Maintenance in progress' : 'Scheduled maintenance'
-  const baseUrl = process.env.NEXTAUTH_URL || ''
+  if (normalizedStatus === 'ONGOING') {
+    await notifyAllUsers('started', maintenance)
+  }
 
-  const htmlContent = (
-    `<div style="font-family: Arial, sans-serif; max-width: 640px; margin: 0 auto; padding: 24px; background: #0f172a; color: #e2e8f0; border-radius: 12px;">
-      <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
-        <div style="width:40px; height:40px; border-radius:12px; background:#1d4ed8; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700;">Z</div>
-        <div>
-          <div style="font-size:14px; color:#94a3b8;">Zyvarin Status</div>
-          <div style="font-size:18px; font-weight:700; color:#e2e8f0;">Maintenance notice</div>
-        </div>
-      </div>
-
-      <div style="padding:18px; border-radius:12px; background: linear-gradient(135deg, #1e293b, #0f172a); border: 1px solid #1e293b;">
-        <div style="font-size:16px; color:#cbd5e1; margin-bottom:12px;">${status === 'ONGOING' ? 'Maintenance is now in progress.' : 'Maintenance has been scheduled.'}</div>
-        <div style="font-size:22px; font-weight:700; color:#e2e8f0; margin-bottom:8px;">${title.trim()}</div>
-        ${message ? `<div style="font-size:15px; color:#cbd5e1; margin-bottom:14px; line-height:1.5;">${message.trim()}</div>` : ''}
-        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap:10px; margin-top:10px;">
-          <div style="padding:12px; border-radius:10px; background:#0b1224; border:1px solid #1e293b;">
-            <div style="font-size:12px; color:#94a3b8; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px;">Status</div>
-            <div style="font-weight:700; color:#e2e8f0;">${status}</div>
-          </div>
-          <div style="padding:12px; border-radius:10px; background:#0b1224; border:1px solid #1e293b;">
-            <div style="font-size:12px; color:#94a3b8; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px;">Starts</div>
-            <div style="font-weight:700; color:#e2e8f0;">${startText}</div>
-          </div>
-          <div style="padding:12px; border-radius:10px; background:#0b1224; border:1px solid #1e293b;">
-            <div style="font-size:12px; color:#94a3b8; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px;">Ends</div>
-            <div style="font-weight:700; color:#e2e8f0;">${endText}</div>
-          </div>
-        </div>
-        <div style="margin-top:16px; font-size:13px; color:#94a3b8;">During maintenance, sign-in and admin pages remain accessible.</div>
-        ${baseUrl ? `<div style="margin-top:16px;"><a href="${baseUrl}/maintenance" style="display:inline-block; padding:10px 16px; background:#1d4ed8; color:#fff; border-radius:10px; text-decoration:none; font-weight:600;">View status</a></div>` : ''}
-      </div>
-    </div>`
-  )
-
-  await Promise.all(
-    users.map(u =>
-      sendMail({
-        to: u.email,
-        subject: subject,
-        htmlContent
-      }).catch(() => null)
-    )
-  )
+  if (normalizedStatus === 'SCHEDULED') {
+    await notifyAllUsers('scheduled', maintenance)
+  }
 
   return NextResponse.json({ message: 'Maintenance saved', maintenance })
 }
@@ -141,6 +134,20 @@ export async function PATCH(req: NextRequest) {
     where: { id },
     data: { status }
   })
+
+  await invalidateMaintenanceCache()
+
+  if (status === 'ONGOING') {
+    await notifyAllUsers('started', updated)
+  }
+
+  if (status === 'COMPLETED') {
+    await notifyAllUsers('completed', updated)
+  }
+
+  if (status === 'CANCELED') {
+    await notifyAllUsers('canceled', updated)
+  }
 
   return NextResponse.json({ message: 'Status updated', maintenance: updated })
 }

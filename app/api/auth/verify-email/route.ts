@@ -1,15 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { sendMail } from "@/utils/mail";
+import { redis } from "@/utils/redis";
+import { rateLimit } from "@/utils/rateLimiter";
+import { getClientIp } from "@/utils/ip";
 
-let otp = Math.floor(100000 + Math.random() * 900000).toString();
-let otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
-
-
-let otpData = {
-    otp,
-    expiry: otpExpiry.toISOString(),
-}
 
 
 
@@ -20,8 +15,29 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ errror: "Email is Required" }, { status: 400 })
         }
 
+        const normalizedEmail = String(email ?? "").trim().toLowerCase();
+
+        const clientIp = getClientIp(req);
+        const emailKey = `rl:otp:email:${normalizedEmail}`;
+        const emailAllowed = await rateLimit({ key: emailKey, limit: 3, windowSeconds: 300 });
+
+        if (!emailAllowed) {
+            return NextResponse.json({ error: `Too many OTP requests for this email. Try after  ${await redis.ttl(emailKey)} seconds.` }, { status: 429 });
+        }
+
+        const ipKey = `rl:otp:ip:${clientIp}`;
+        const ipAllowed = await rateLimit({ key: ipKey, limit: 10, windowSeconds: 300 });
+
+        if (!ipAllowed) {
+            return NextResponse.json({ error: `Too many requests from this IP. Try again in ${await redis.ttl(ipKey)} seconds.` }, { status: 429 });
+        }
+
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        await redis.set(`otp:${normalizedEmail}`, otp, "EX", 10 * 60);
+
+
         const isEmailExists = await prisma.user.findUnique({
-            where: { email }
+            where: { email: normalizedEmail }
         })
         if (!isEmailExists) {
             return NextResponse.json({ error: "Email Not Exists. Use another Email." }, { status: 400 });
@@ -31,8 +47,10 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ message: "Account Already Verified." }, { status: 201 })
         }
 
+
+
         const subject = "OTP For Account Verification - Zyvarin Social";
-        const to = email;
+        const to = normalizedEmail;
         const htmlContent = `
           <!DOCTYPE html>
 <html lang="en" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
@@ -64,8 +82,8 @@ export async function POST(req: NextRequest) {
 </head>
 <body style="margin: 0; width: 100%; padding: 0; word-break: break-word; -webkit-font-smoothing: antialiased; background-color: #f7f8fa;">
     <div style="display: none;">
-        Your Zyvarin verification code is: ${otpData.otp}. Use this to complete your registration.
-        &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;
+        Your Zyvarin verification code is: ${otp}. Use this to complete your registration.
+        &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;
         &#160;
     </div>
     <div role="article" aria-roledescription="email" aria-label="Confirm Your Identity" lang="en">
@@ -105,7 +123,7 @@ export async function POST(req: NextRequest) {
                                                     <td align="center" style="padding: 24px 0;">
                                                         <div style="background-color: #EEF2FF; border: 1px solid #C7D2FE; border-radius: 12px; padding: 24px 40px; display: inline-block;">
                                                             <span style="font-family: 'Inter', monospace; font-size: 36px; font-weight: 700; letter-spacing: 8px; color: #4F46E5; line-height: 1;">
-                                                                ${otpData.otp}
+                                                                ${otp}
                                                             </span>
                                                         </div>
                                                     </td>
@@ -166,36 +184,41 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
     try {
         const { email, otp } = await req.json();
-        if (!email || !otp) {
+        const normalizedEmail = String(email ?? "").trim().toLowerCase();
+        const normalizedOtp = String(otp ?? "").trim();
+        if (!normalizedEmail || !normalizedOtp) {
             return NextResponse.json({ error: "ALL Fields Required!" }, { status: 404 })
         }
 
-        const currentTime = new Date();
+        const storedOtp = await redis.get(`otp:${normalizedEmail}`);
 
-        if (email === email && otpData.otp === otp) {
-            const expiryTime = new Date(otpData.expiry);
-            if (currentTime < expiryTime) {
-                const user = await prisma.user.update({
-                    where: { email },
-                    data: { isEmailVerified: true, status: 'ACTIVE' },
-                });
-
-                await prisma.notification.create({
-                    data: {
-                        userId: user.id,
-                        senderType: "ADMIN",
-                        title: "Welcome to Zyvarin Social! 🎉",
-                        message: "Hi " + user.fullName + ", we're excited to have you on board. Start exploring and connecting with Zyvarin Social today!",
-                    }
-                })
-
-                return NextResponse.json({ message: "Your account has been verified successfully" }, { status: 200 });
-            } else {
-                return NextResponse.json({ error: "The OTP You entered has expired" }, { status: 400 });
-            }
-        } else {
-            return NextResponse.json({ error: "Your OTP is incorrect" }, { status: 400 });
+        const clientIp = getClientIp(req);
+        const emailKey = `rl:otp_verify:email:${normalizedEmail}`;
+        const emailAllowed = await rateLimit({ key: emailKey, limit: 5, windowSeconds: 300 });
+        if (!emailAllowed) {
+            return NextResponse.json({ error: `Too many OTP verification attempts for this email. Try after ${await redis.ttl(emailKey)} seconds.` }, { status: 429 });
         }
+        const ipKey = `rl:otp_verify:ip:${clientIp}`;
+        const ipAllowed = await rateLimit({ key: ipKey, limit: 20, windowSeconds: 300 });
+        if (!ipAllowed) {
+            return NextResponse.json({ error: "Too many OTP verification attempts from this IP. Try after some time." }, { status: 429 });
+        }
+        if (!storedOtp) {
+            return NextResponse.json({ error: "OTP Expired. Please Request a new one." }, { status: 400 });
+        }
+
+        if (storedOtp !== normalizedOtp) {
+            return NextResponse.json({ error: "Invalid OTP. Please Try Again." }, { status: 400 });
+        }
+        await prisma.user.update({
+            where: { email: normalizedEmail! },
+            data: { isEmailVerified: true, status: "ACTIVE" }
+        });
+
+        await redis.del(`otp:${normalizedEmail}`);
+
+
+        return NextResponse.json({ message: "Your email has been verified successfully. You can now log in." }, { status: 200 });
 
 
     } catch (error) {

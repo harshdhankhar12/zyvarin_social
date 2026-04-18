@@ -17,15 +17,22 @@ export default async function AdminDashboardPage() {
   ])
 
   const recentUsers = await prisma.user.findMany({
-    take: 5,
+    take: 10,
     orderBy: { createdAt: 'desc' },
     select: {
       id: true,
       fullName: true,
       email: true,
+      isEmailVerified: true,
       subscription_plan: true,
       createdAt: true,
-      avatarUrl: true
+      avatarUrl: true,
+      socialProviders: {
+        where: { isConnected: true },
+        select: {
+          provider: true
+        }
+      }
     }
   })
 

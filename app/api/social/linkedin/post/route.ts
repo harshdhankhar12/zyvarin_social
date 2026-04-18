@@ -4,6 +4,9 @@ import prisma from "@/lib/prisma"
 import { canPublishPost } from "@/app/dashboard/pricingUtils"
 import { checkAndNotifyQuota } from "@/utils/quotaNotifications"
 import { incrementPostCount, getQuotaWarning } from "@/lib/quotaTracker"
+import { redis } from "@/utils/redis"
+import { rateLimit } from "@/utils/rateLimiter"
+import { getClientIp } from "@/utils/ip"
 
 async function uploadImageToLinkedin(
   imageUrl: string,
@@ -80,6 +83,29 @@ export async function POST(request: NextRequest) {
         { error: "Unauthorized" },
         { status: 401 }
       )
+    }
+
+    if (session.id) {
+      const clientIp = getClientIp(request)
+      const userKey = `rl:publish_linkedin:user:${session.id}`
+      const userAllowed = await rateLimit({ key: userKey, limit: 20, windowSeconds: 300 })
+
+      if (!userAllowed) {
+        return NextResponse.json(
+          { error: `Too many post requests. Try again in ${await redis.ttl(userKey)} seconds.` },
+          { status: 429 }
+        )
+      }
+
+      const ipKey = `rl:publish_linkedin:ip:${clientIp}`
+      const ipAllowed = await rateLimit({ key: ipKey, limit: 50, windowSeconds: 300 })
+
+      if (!ipAllowed) {
+        return NextResponse.json(
+          { error: `Too many requests from this IP. Try again in ${await redis.ttl(ipKey)} seconds.` },
+          { status: 429 }
+        )
+      }
     }
 
     const { content, mediaUrls = [], postType = 'immediate', scheduledFor = null, postId = null, fromCron = false, aiEnhancements = [], aiToolUsed = false } = await request.json()

@@ -45,7 +45,7 @@ const ActionBar: React.FC<ActionBarProps> = ({
         <div className="p-3 border-b">
           <div className="flex items-center justify-between">
             <span className="text-sm font-semibold text-slate-900">Post to accounts</span>
-            <button 
+            <button
               onClick={() => togglePlatform('clear')}
               className="text-xs text-slate-500 hover:text-slate-700"
             >
@@ -58,13 +58,12 @@ const ActionBar: React.FC<ActionBarProps> = ({
             const Icon = getProviderIcon(account.provider)
             const colorClass = getProviderColor(account.provider)
             const isSelected = selectedPlatforms.includes(account.provider)
-            
+
             return (
               <div
                 key={account.provider}
-                className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${
-                  isSelected ? 'bg-slate-50' : 'hover:bg-slate-50'
-                }`}
+                className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${isSelected ? 'bg-slate-50' : 'hover:bg-slate-50'
+                  }`}
                 onClick={() => togglePlatform(account.provider)}
               >
                 <div className="flex items-center gap-3">
@@ -76,9 +75,8 @@ const ActionBar: React.FC<ActionBarProps> = ({
                     <p className="text-xs text-slate-500">{getUsername(account.provider, account.profileData)}</p>
                   </div>
                 </div>
-                <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${
-                  isSelected ? `bg-blue-600 border-blue-600` : 'border-slate-300'
-                }`}>
+                <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${isSelected ? `bg-blue-600 border-blue-600` : 'border-slate-300'
+                  }`}>
                   {isSelected && <Check className="w-3 h-3 text-white" />}
                 </div>
               </div>
@@ -90,11 +88,11 @@ const ActionBar: React.FC<ActionBarProps> = ({
   )
 
   return (
-    <div className="border-t border-slate-200 bg-white px-6 py-3 fixed bottom-0 left-0 right-0 z-50">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+    <div className="fixed bottom-0 left-0 right-0 lg:left-20 lg:right-8 z-50 border-t border-slate-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/90 px-4 sm:px-6 py-3 shadow-[0_-6px_16px_rgba(15,23,42,0.06)]">
+      <div className="max-w-full flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-center gap-3 flex-wrap">
           <PlatformDropdown />
-          
+
           {selectedPlatforms.length > 0 && (
             <div className="flex items-center gap-2">
               <div className="h-4 w-px bg-slate-200"></div>
@@ -104,7 +102,7 @@ const ActionBar: React.FC<ActionBarProps> = ({
                   const bgClass = getProviderBgColor(platform)
                   const colorClass = getProviderColor(platform)
                   return (
-                    <div 
+                    <div
                       key={platform}
                       className={`p-1 rounded ${bgClass}`}
                     >
@@ -119,10 +117,10 @@ const ActionBar: React.FC<ActionBarProps> = ({
             </div>
           )}
         </div>
-        
-        <div className="flex items-center gap-2">
+
+        <div className="flex items-center gap-2 flex-wrap lg:justify-end">
           {scheduleTime !== 'now' && (
-            <div className="px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-md flex items-center gap-2">
+            <div className="px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-md flex items-center gap-2 max-w-full">
               <div className="flex items-center gap-1.5">
                 <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></div>
                 <span className="text-xs font-medium text-indigo-700">Scheduled for</span>
@@ -137,29 +135,28 @@ const ActionBar: React.FC<ActionBarProps> = ({
               </span>
             </div>
           )}
-          <button 
+          <button
             onClick={handleSaveToLocal}
             className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-md transition-colors flex items-center gap-2"
           >
             <Save className="w-4 h-4" />
             Save Draft
           </button>
-          <button 
+          <button
             onClick={handlePublish}
             disabled={!canPublish || publishLoading}
-            className={`px-5 py-2 text-sm font-medium rounded-md transition-colors flex items-center gap-2 ${
-              !canPublish || publishLoading
+            className={`px-5 py-2 text-sm font-medium rounded-md transition-colors flex items-center gap-2 whitespace-nowrap ${!canPublish || publishLoading
               ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
               : 'bg-indigo-600 text-white hover:bg-indigo-700'
-            }`}
+              }`}
           >
             {publishLoading ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
               <Send className="w-4 h-4" />
             )}
-            {publishLoading ? (scheduleTime !== 'now' ? 'Scheduling...' : 'Publishing...') : 
-             scheduleTime !== 'now' ? 'Schedule Post' : 'Publish Now'}
+            {publishLoading ? (scheduleTime !== 'now' ? 'Scheduling...' : 'Publishing...') :
+              scheduleTime !== 'now' ? 'Schedule Post' : 'Publish Now'}
           </button>
         </div>
       </div>

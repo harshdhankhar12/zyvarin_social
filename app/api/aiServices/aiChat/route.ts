@@ -153,6 +153,19 @@ export async function GET() {
             return NextResponse.json({ error: "User not authenticated." }, { status: 401 });
         }
 
+        const { redis } = await import('@/utils/redis');
+        const { rateLimit } = await import('@/utils/rateLimiter');
+
+        const userKey = `rl:ai_chat_status:user:${userInfo.id}`;
+        const userAllowed = await rateLimit({ key: userKey, limit: 20, windowSeconds: 300 });
+
+        if (!userAllowed) {
+            return NextResponse.json(
+                { error: `Too many status checks. Try again in ${await redis.ttl(userKey)} seconds.` },
+                { status: 429 }
+            );
+        }
+
         const user = await prisma.user.findUnique({
             where: { id: userInfo.id },
             select: {

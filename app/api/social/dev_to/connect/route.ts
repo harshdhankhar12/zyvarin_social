@@ -6,28 +6,53 @@ import { canConnectMorePlatforms } from "@/app/dashboard/pricingUtils"
 export async function POST(request: Request) {
   try {
     const session = await currentLoggedInUserInfo()
-    
+
     if (!session) {
-      return NextResponse.json({ 
-        success: false, 
-        message: "Unauthorized" 
+      return NextResponse.json({
+        success: false,
+        message: "Unauthorized"
       }, { status: 401 })
+    }
+
+    const { redis } = await import('@/utils/redis');
+    const { rateLimit } = await import('@/utils/rateLimiter');
+    const { getClientIp } = await import('@/utils/ip');
+
+    const clientIp = getClientIp(request as any);
+    const userKey = `rl:connect_devto:user:${session.id}`;
+    const userAllowed = await rateLimit({ key: userKey, limit: 5, windowSeconds: 300 });
+
+    if (!userAllowed) {
+      return NextResponse.json(
+        { success: false, message: `Too many connection attempts. Try again in ${await redis.ttl(userKey)} seconds.` },
+        { status: 429 }
+      );
+    }
+
+    const ipKey = `rl:connect_devto:ip:${clientIp}`;
+    const ipAllowed = await rateLimit({ key: ipKey, limit: 15, windowSeconds: 300 });
+
+    if (!ipAllowed) {
+      return NextResponse.json(
+        { success: false, message: `Too many requests from this IP. Try again in ${await redis.ttl(ipKey)} seconds.` },
+        { status: 429 }
+      );
     }
 
     const { apiKey } = await request.json()
 
     if (!apiKey?.trim()) {
-      return NextResponse.json({ 
+      return NextResponse.json({
         success: false,
-        message: "API key is required" 
+        message: "API key is required"
       }, { status: 400 })
     }
 
     const canConnect = await canConnectMorePlatforms(session.id)
     if (!canConnect) {
-      return NextResponse.json({ 
+      return NextResponse.json({
         success: false,
-        message: "Platform connection limit reached for your plan" 
+        message: "Platform connection limit reached for your plan"
       }, { status: 403 })
     }
 
@@ -45,22 +70,22 @@ export async function POST(request: Request) {
           'Content-Type': 'application/json'
         }
       })
-      
+
       if (!articlesResponse.ok) {
-        return NextResponse.json({ 
+        return NextResponse.json({
           success: false,
-          message: "Invalid API key. Please check your Dev.to API key." 
+          message: "Invalid API key. Please check your Dev.to API key."
         }, { status: 400 })
       }
-      
+
       const articles = await articlesResponse.json()
       if (!articles || articles.length === 0) {
-        return NextResponse.json({ 
+        return NextResponse.json({
           success: false,
-          message: "Could not retrieve user information from Dev.to" 
+          message: "Could not retrieve user information from Dev.to"
         }, { status: 400 })
       }
-      
+
       const firstArticle = articles[0]
       const userData = {
         id: firstArticle.user_id || Date.now().toString(),
@@ -71,7 +96,7 @@ export async function POST(request: Request) {
         website_url: firstArticle.url,
         profile_image: firstArticle.profile_image_90
       }
-      
+
       const profile = {
         id: userData.id.toString(),
         username: userData.username,
@@ -115,7 +140,7 @@ export async function POST(request: Request) {
         update: {
           userId: session.id,
           providerUserId: userData.id.toString(),
-          access_token: apiKey.trim(), 
+          access_token: apiKey.trim(),
           isConnected: true,
           profileData: profile,
           connectedAt: new Date(),
@@ -151,14 +176,14 @@ export async function POST(request: Request) {
     }
 
     const userData = await userResponse.json()
-    
+
     if (!userData || !userData.id) {
-      return NextResponse.json({ 
+      return NextResponse.json({
         success: false,
-        message: "Invalid user data received from Dev.to" 
+        message: "Invalid user data received from Dev.to"
       }, { status: 400 })
     }
-    
+
     const profile = {
       id: userData.id.toString(),
       username: userData.username,
@@ -202,7 +227,7 @@ export async function POST(request: Request) {
       update: {
         userId: session.id,
         providerUserId: userData.id.toString(),
-        access_token: apiKey.trim(), 
+        access_token: apiKey.trim(),
         isConnected: true,
         profileData: profile,
         connectedAt: new Date(),
@@ -235,12 +260,12 @@ export async function POST(request: Request) {
         name: userData.name,
       }
     }, { status: 200 })
-    
+
   } catch (error) {
     console.error('Dev.to connect error:', error)
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: false,
-      message: "Failed to connect Dev.to. Please check your API key and try again." 
+      message: "Failed to connect Dev.to. Please check your API key and try again."
     }, { status: 500 })
   }
 }

@@ -239,3 +239,30 @@
 .animate-float {
   animation: float 5s ease-in-out infinite;
 }
+
+.compose-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+.compose-scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.compose-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.compose-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #cbd5e1, #94a3b8);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.compose-scroll::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #94a3b8, #64748b);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}

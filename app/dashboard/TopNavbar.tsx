@@ -64,12 +64,12 @@ const TopNavbar: React.FC<{ user: User; teams: Team[] }> = ({ user, teams }) => 
 
   const handleNotificationClick = async () => {
     const hasUnread = notifications.some(n => !n.isRead);
-    
+
     if (hasUnread && !isLoadingNotifications) {
       setIsLoadingNotifications(true);
       try {
         const response = await axios.post('/api/notifications/mark-read');
-        
+
         if (response.status === 200 && response.data.success) {
           setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
           setUnreadCount(0);
@@ -80,28 +80,28 @@ const TopNavbar: React.FC<{ user: User; teams: Team[] }> = ({ user, teams }) => 
         setIsLoadingNotifications(false);
       }
     }
-    
+
     setIsModalOpen(true);
   };
   return (
     <header className="fixed w-full h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 z-20">
       <div className="flex items-center gap-4">
-       
-        
+
+
         <div className="flex items-center gap-3">
-          <Image 
-            src="/zyvarin-logo_1.png" 
-            alt="Zyvarin Logo" 
+          <Image
+            src="/zyvarin-logo_1.png"
+            alt="Zyvarin Logo"
             width={120}
             height={40}
             className="w-32 h-auto md:w-40 -ml-12 object-contain md:-ml-16"
           />
-           <Link href="/dashboard" className=" md:block -ml-12 text-gray-700 hover:text-gray-900">
-                <h1 className=" text-2xl md:text-3xl font-bold tracking-tight flex gap-2">
-                  <span className="text-accent">
-                    Zyvarin</span>
-                   Dashboard</h1>
-              </Link>
+          <Link href="/dashboard" className=" md:block -ml-12 text-gray-700 hover:text-gray-900">
+            <h1 className=" text-2xl md:text-3xl font-bold tracking-tight flex gap-2">
+              <span className="text-accent">
+                Zyvarin</span>
+              Dashboard</h1>
+          </Link>
         </div>
 
         {/* <div className="hidden md:block ml-8">
@@ -167,13 +167,13 @@ const TopNavbar: React.FC<{ user: User; teams: Team[] }> = ({ user, teams }) => 
         <div className="relative hidden sm:block w-48 md:w-64">
           <SearchBar />
         </div>
-        
+
         <div className="h-6 w-px bg-slate-200 mx-1 hidden md:block"></div>
-        
+
         <Link href="/dashboard/help" className="p-2 text-slate-500 hover:bg-slate-100 rounded-full transition-colors hidden sm:block">
           <HelpCircle className="w-5 h-5" />
         </Link>
-        <button 
+        <button
           onClick={handleNotificationClick}
           className="p-2 text-slate-500 hover:bg-slate-100 rounded-full transition-colors relative"
           disabled={isLoadingNotifications}
@@ -188,13 +188,13 @@ const TopNavbar: React.FC<{ user: User; teams: Team[] }> = ({ user, teams }) => 
             </>
           )}
         </button>
-        
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className="flex items-center gap-2 pl-2 pr-1 py-1 hover:bg-slate-100 rounded-full transition-colors">
               <Image
-                src={ user.avatarUrl || '/default-avatar.png' }
-                alt="User" 
+                src={user.avatarUrl || '/default-avatar.png'}
+                alt="User"
                 width={32}
                 height={32}
                 className="w-8 h-8 rounded-full border border-slate-200"
@@ -255,9 +255,9 @@ const TopNavbar: React.FC<{ user: User; teams: Team[] }> = ({ user, teams }) => 
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem 
+            <DropdownMenuItem
               onClick={() => signOut({ callbackUrl: '/signin' })}
-              className="flex items-center gap-2 cursor-pointer text-red-600 hover:text-white"
+              className="flex items-center gap-2 cursor-pointer text-red-600"
             >
               <LogOut className="w-4 h-4" />
               <span>Sign Out</span>

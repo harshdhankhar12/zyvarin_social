@@ -12,6 +12,31 @@ export async function POST(
       return NextResponse.json({ error: 'Please login to vote' }, { status: 401 })
     }
 
+    const { redis } = await import('@/utils/redis');
+    const { rateLimit } = await import('@/utils/rateLimiter');
+    const { getClientIp } = await import('@/utils/ip');
+
+    const clientIp = getClientIp(req as any);
+    const userKey = `rl:blog_upvote:user:${user.id}`;
+    const userAllowed = await rateLimit({ key: userKey, limit: 30, windowSeconds: 300 });
+
+    if (!userAllowed) {
+      return NextResponse.json(
+        { error: `Too many voting requests. Try again in ${await redis.ttl(userKey)} seconds.` },
+        { status: 429 }
+      );
+    }
+
+    const ipKey = `rl:blog_upvote:ip:${clientIp}`;
+    const ipAllowed = await rateLimit({ key: ipKey, limit: 60, windowSeconds: 300 });
+
+    if (!ipAllowed) {
+      return NextResponse.json(
+        { error: `Too many requests from this IP. Try again in ${await redis.ttl(ipKey)} seconds.` },
+        { status: 429 }
+      );
+    }
+
     const resolvedParams = await params
 
     const existingUpvote = await prisma.blogUpvote.findFirst({
@@ -29,7 +54,7 @@ export async function POST(
         where: { id: resolvedParams.id },
         data: { upvotes: { decrement: 1 } }
       })
-      return NextResponse.json({ 
+      return NextResponse.json({
         message: 'Upvote removed',
         upvotes: updatedBlog.upvotes,
         downvotes: updatedBlog.downvotes
@@ -65,10 +90,10 @@ export async function POST(
       data: { upvotes: { increment: 1 } }
     })
 
-    return NextResponse.json({ 
-      message: 'Upvoted', 
+    return NextResponse.json({
+      message: 'Upvoted',
       upvotes: updatedBlog.upvotes,
-      downvotes: updatedBlog.downvotes 
+      downvotes: updatedBlog.downvotes
     })
   } catch (error) {
     console.error('Error upvoting:', error)

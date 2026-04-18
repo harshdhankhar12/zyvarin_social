@@ -13,15 +13,15 @@ import { publishToMultiplePlatforms } from '@/utils/publishPost'
 import { validateScheduleTime } from '@/utils/timezoneUtils'
 
 
-const ComposeContent = ({ 
-  connectedAccounts, 
-  hasLinkedin, 
+const ComposeContent = ({
+  connectedAccounts,
+  hasLinkedin,
   hasTwitter,
   hasPinterest,
   aiLimits,
   userPlan,
   userTimezone
-}: { 
+}: {
   connectedAccounts: Array<{ provider: string; profileData: any }>
   hasLinkedin: boolean
   hasTwitter: boolean
@@ -47,7 +47,7 @@ const ComposeContent = ({
   const [publishLoading, setPublishLoading] = useState(false)
   const [aiLoading, setAiLoading] = useState(false)
   const [uploadLoading, setUploadLoading] = useState(false)
-  const [result, setResult] = useState<{success?: boolean; message?: string} | null>(null)
+  const [result, setResult] = useState<{ success?: boolean; message?: string } | null>(null)
   const [showAISuggestions, setShowAISuggestions] = useState(false)
   const [aiSuggestions, setAiSuggestions] = useState<any>(null)
   const [selectedEnhanceOptions, setSelectedEnhanceOptions] = useState<string[]>(['Professional'])
@@ -85,44 +85,44 @@ const ComposeContent = ({
     return () => clearTimeout(timer)
   }, [redirectCountdown, router])
 
-const handleUploadImage = async (file: File): Promise<string | null> => {
-  setUploadLoading(true)
-  try {
-    const fileSizeInMB = file.size / (1024 * 1024)
-    if (fileSizeInMB > 5) {
-      setResult({ success: false, message: 'File too large. Maximum size is 5MB.' })
-      return null
-    }
-
-    const formData = new FormData()
-    formData.append('image', file)
-
-    const response = await axios.post('/api/upload/image', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 30000,
-      onUploadProgress: (evt) => {
-        if (!evt.total) return
-        const percent = Math.round((evt.loaded * 100) / evt.total)
-        setUploadProgress(percent)
+  const handleUploadImage = async (file: File): Promise<string | null> => {
+    setUploadLoading(true)
+    try {
+      const fileSizeInMB = file.size / (1024 * 1024)
+      if (fileSizeInMB > 5) {
+        setResult({ success: false, message: 'File too large. Maximum size is 5MB.' })
+        return null
       }
-    })
 
-    if (response.data.success) {
-      return response.data.imageUrl
+      const formData = new FormData()
+      formData.append('image', file)
+
+      const response = await axios.post('/api/upload/image', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 30000,
+        onUploadProgress: (evt) => {
+          if (!evt.total) return
+          const percent = Math.round((evt.loaded * 100) / evt.total)
+          setUploadProgress(percent)
+        }
+      })
+
+      if (response.data.success) {
+        return response.data.imageUrl
+      }
+      return null
+    } catch (error: any) {
+      console.error('Error uploading image:', error)
+      setResult({
+        success: false,
+        message: error.response?.data?.error || 'Failed to upload image'
+      })
+      return null
+    } finally {
+      setUploadLoading(false)
+      setTimeout(() => setUploadProgress(0), 500)
     }
-    return null
-  } catch (error: any) {
-    console.error('Error uploading image:', error)
-    setResult({ 
-      success: false, 
-      message: error.response?.data?.error || 'Failed to upload image' 
-    })
-    return null
-  } finally {
-    setUploadLoading(false)
-    setTimeout(() => setUploadProgress(0), 500)
   }
-}
   const handleAfterAddMedia = (url: string) => {
     setMediaUrls(prev => [...prev, url])
     setMediaAlts(prev => [...prev, ""])
@@ -168,8 +168,8 @@ const handleUploadImage = async (file: File): Promise<string | null> => {
         scheduledFor,
         userTimezone
       )
-      
-      setResult({ 
+
+      setResult({
         success: successCount > 0,
         message
       })
@@ -188,15 +188,15 @@ const handleUploadImage = async (file: File): Promise<string | null> => {
 
     } catch (error: any) {
       const action = isScheduled ? 'schedule' : 'publish'
-      setResult({ 
-        success: false, 
+      setResult({
+        success: false,
         message: `❌ Failed to ${action} posts: ${error.message || 'Unknown error'}`
       })
     } finally {
       setPublishLoading(false)
     }
   }
-  
+
 
   const handleSaveToLocal = () => {
     setPublishLoading(true)
@@ -219,6 +219,11 @@ const handleUploadImage = async (file: File): Promise<string | null> => {
   }
 
   const togglePlatform = (platform: string) => {
+    if (platform === 'clear') {
+      setSelectedPlatforms([])
+      return
+    }
+
     if (selectedPlatforms.includes(platform)) {
       setSelectedPlatforms(prev => prev.filter(p => p !== platform))
     } else {
@@ -239,12 +244,12 @@ const handleUploadImage = async (file: File): Promise<string | null> => {
       return
     }
 
-    if(content.length > 2000) {
+    if (content.length > 2000) {
       setResult({ success: false, message: 'Content too long for AI enhancement (max 2000 characters)' })
       return
     }
 
-    if(content.length < 50) {
+    if (content.length < 50) {
       setResult({ success: false, message: 'Content too short for AI enhancement (min 50 characters)' })
       return
     }
@@ -252,14 +257,14 @@ const handleUploadImage = async (file: File): Promise<string | null> => {
     setAiLoading(true)
     setShowAISuggestions(true)
     setSelectedEnhanceOptions(enhancementOptions)
-    
+
     try {
       const response = await axios.post('/api/aiServices/composePostPreview', {
         content,
         selectedPlatforms,
         enhancements: enhancementOptions
       })
-      
+
       setAiSuggestions(response.data.suggestions)
     } catch (error) {
       setResult({ success: false, message: 'Failed to generate AI suggestions' })
@@ -282,7 +287,7 @@ const handleUploadImage = async (file: File): Promise<string | null> => {
 
   if (connectedAccounts.length === 0) {
     return (
-      <div className="h-screen flex flex-col items-center justify-center bg-white border border-slate-200 rounded-xl p-8 text-center">
+      <div className="min-h-[calc(100vh-8rem)] flex flex-col items-center justify-center bg-white border border-slate-200 rounded-xl p-6 sm:p-8 text-center">
         <Users className="w-16 h-16 text-slate-300 mb-4" />
         <h2 className="text-2xl font-semibold text-slate-900 mb-2">No Connected Accounts</h2>
         <p className="text-sm text-slate-500 mb-6">Connect your social media accounts to start composing posts.</p>
@@ -294,8 +299,8 @@ const handleUploadImage = async (file: File): Promise<string | null> => {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-white">
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+    <div className="h-full min-h-0 flex flex-col bg-white">
+      <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden pb-20 lg:pb-10">
         <EditorPanel
           content={content}
           setContent={setContent}
@@ -323,7 +328,7 @@ const handleUploadImage = async (file: File): Promise<string | null> => {
           aiLimits={aiLimits}
           userPlan={userPlan}
         />
-        
+
         <PreviewPanel
           connectedAccounts={connectedAccounts}
           selectedPlatforms={selectedPlatforms}

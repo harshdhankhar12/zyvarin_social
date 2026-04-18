@@ -2,15 +2,39 @@ import { NextRequest, NextResponse } from 'next/server'
 import { currentLoggedInUserInfo } from '@/utils/currentLogegdInUserInfo'
 import prisma from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
+import { redis } from '@/utils/redis'
+import { rateLimit } from '@/utils/rateLimiter'
+import { getClientIp } from '@/utils/ip'
 
 export async function POST(req: NextRequest) {
   try {
     const session = await currentLoggedInUserInfo()
-    
+
     if (!session) {
       return NextResponse.json(
         { error: 'Unauthorized. Please login first.' },
         { status: 401 }
+      )
+    }
+
+    const clientIp = getClientIp(req)
+    const userKey = `rl:change_password:user:${session.id}`
+    const userAllowed = await rateLimit({ key: userKey, limit: 5, windowSeconds: 300 })
+
+    if (!userAllowed) {
+      return NextResponse.json(
+        { error: `Too many password change attempts. Try again in ${await redis.ttl(userKey)} seconds.` },
+        { status: 429 }
+      )
+    }
+
+    const ipKey = `rl:change_password:ip:${clientIp}`
+    const ipAllowed = await rateLimit({ key: ipKey, limit: 15, windowSeconds: 300 })
+
+    if (!ipAllowed) {
+      return NextResponse.json(
+        { error: `Too many requests from this IP. Try again in ${await redis.ttl(ipKey)} seconds.` },
+        { status: 429 }
       )
     }
 

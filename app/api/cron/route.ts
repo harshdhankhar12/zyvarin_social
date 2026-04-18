@@ -1,6 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { publishPostDirectly } from '@/lib/publishPostDirect'
+import { sendMail } from '@/utils/mail'
+import { redis } from '@/utils/redis'
+import { buildMaintenanceEmail } from '@/utils/maintenanceMail'
+
+const cronLockKey = 'cron:zyvarin:lock'
+const maintenanceCacheKey = 'cache:maintenance:active'
+
+
+async function checkCronTime() {
+  const now = new Date()
+  const minutes = now.getMinutes()
+  const hours = now.getHours()
+  const subject = `Cron Job Executed at ${now.toISOString()}`
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+      <h2 style="color: #333;">Cron Job Execution Report</h2>
+      <p style="font-size: 16px; color: #555;">The cron job was executed at <strong>${now.toLocaleString()}</strong>.</p>
+      <p style="font-size: 16px; color: #555;">Current Server Time: ${now.toLocaleString()}</p>
+      <p style="font-size: 16px; color: #555;">Minutes: ${minutes}</p>
+      <p style="font-size: 16px; color: #555;">Hours: ${hours}</p>
+      <p style="font-size: 16px; color: #555;">This is a test email to verify that the cron job is running correctly.</p>
+    </div>
+  `
+  await sendMail({
+    to: process.env.EMAIL_USER!,
+    subject,
+    htmlContent
+  })
+}
+
+
 
 async function handlePendingTransactions() {
   const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
@@ -99,7 +130,7 @@ async function handleSubscriptionExpiry() {
   const { sendMail } = await import('@/utils/mail')
   const now = new Date()
   const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
-  
+
   const usersExpiringIn7Days = await prisma.user.findMany({
     where: {
       subscription_plan: { in: ['CREATOR', 'PREMIUM'] },
@@ -213,25 +244,87 @@ async function handleSubscriptionExpiry() {
 async function handleMaintenanceWindows() {
   const now = new Date()
 
-  const started = await prisma.maintenance.updateMany({
+  const startingMaintenances = await prisma.maintenance.findMany({
     where: {
       status: 'SCHEDULED',
-      startsAt: { lte: now }
-    },
-    data: { status: 'ONGOING' }
+      startsAt: {
+        lte: now
+      }
+    }
   })
 
-  const completed = await prisma.maintenance.updateMany({
+  const completedMaintenances = await prisma.maintenance.findMany({
     where: {
       status: 'ONGOING',
-      endsAt: { lte: now }
-    },
-    data: { status: 'COMPLETED' }
+      endsAt: {
+        lte: now
+      }
+    }
   })
 
+  if (startingMaintenances.length > 0 || completedMaintenances.length > 0) {
+    await redis.del(maintenanceCacheKey)
+  }
+
+  const users = await prisma.user.findMany({
+    select: { email: true }
+  })
+
+  for (const maintenance of startingMaintenances) {
+    await prisma.maintenance.update({
+      where: { id: maintenance.id },
+      data: { status: 'ONGOING' }
+    })
+
+    const email = buildMaintenanceEmail({
+      type: 'started',
+      title: maintenance.title,
+      message: maintenance.message,
+      startsAt: maintenance.startsAt,
+      endsAt: maintenance.endsAt,
+      baseUrl: process.env.NEXTAUTH_URL || ''
+    })
+
+    await Promise.all(
+      users.map(user =>
+        sendMail({
+          to: user.email,
+          subject: email.subject,
+          htmlContent: email.htmlContent
+        }).catch(() => null)
+      )
+    )
+  }
+
+  for (const maintenance of completedMaintenances) {
+    await prisma.maintenance.update({
+      where: { id: maintenance.id },
+      data: { status: 'COMPLETED' }
+    })
+
+    const email = buildMaintenanceEmail({
+      type: 'completed',
+      title: maintenance.title,
+      message: maintenance.message,
+      startsAt: maintenance.startsAt,
+      endsAt: maintenance.endsAt,
+      baseUrl: process.env.NEXTAUTH_URL || ''
+    })
+
+    await Promise.all(
+      users.map(user =>
+        sendMail({
+          to: user.email,
+          subject: email.subject,
+          htmlContent: email.htmlContent
+        }).catch(() => null)
+      )
+    )
+  }
+
   return {
-    started: started.count,
-    completed: completed.count,
+    started: startingMaintenances.length,
+    completed: completedMaintenances.length,
     timestamp: new Date().toISOString()
   }
 }
@@ -246,6 +339,12 @@ export async function GET(req: NextRequest) {
     if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+
+    const lock = await redis.setnx(cronLockKey, new Date().toISOString())
+    if (!lock) {
+      return NextResponse.json({ success: true, skipped: true, message: 'Cron already running' })
+    }
+    await redis.expire(cronLockKey, 1500)
 
     const now = new Date()
 
@@ -328,7 +427,7 @@ export async function GET(req: NextRequest) {
         }
       } catch (error: any) {
         console.error(`Error processing post ${post.id}:`, error.message)
-        
+
         await prisma.post.update({
           where: { id: post.id },
           data: {
@@ -357,10 +456,10 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    const maintenanceResults = await handleMaintenanceWindows()
     const transactionResults = await handlePendingTransactions()
     const invoiceResults = await handlePendingInvoices()
     const subscriptionResults = await handleSubscriptionExpiry()
-    const maintenanceResults = await handleMaintenanceWindows()
 
     return NextResponse.json({
       success: true,
@@ -383,6 +482,8 @@ export async function GET(req: NextRequest) {
       { success: false, error: error.message || 'Failed to process scheduled posts' },
       { status: 500 }
     )
+  } finally {
+    await redis.del(cronLockKey)
   }
 }
 

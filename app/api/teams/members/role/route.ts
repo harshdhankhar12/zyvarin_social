@@ -2,12 +2,36 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { currentLoggedInUserInfo } from '@/utils/currentLogegdInUserInfo'
 import { isTeamOwner, canManageMembers } from '@/utils/teamUtils'
+import { redis } from '@/utils/redis'
+import { rateLimit } from '@/utils/rateLimiter'
+import { getClientIp } from '@/utils/ip'
 
 export async function POST(req: NextRequest) {
   try {
     const user = await currentLoggedInUserInfo()
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const clientIp = getClientIp(req)
+    const userKey = `rl:member_role:user:${user.id}`
+    const userAllowed = await rateLimit({ key: userKey, limit: 10, windowSeconds: 300 })
+
+    if (!userAllowed) {
+      return NextResponse.json(
+        { error: `Too many role change requests. Try again in ${await redis.ttl(userKey)} seconds.` },
+        { status: 429 }
+      )
+    }
+
+    const ipKey = `rl:member_role:ip:${clientIp}`
+    const ipAllowed = await rateLimit({ key: ipKey, limit: 25, windowSeconds: 300 })
+
+    if (!ipAllowed) {
+      return NextResponse.json(
+        { error: `Too many requests from this IP. Try again in ${await redis.ttl(ipKey)} seconds.` },
+        { status: 429 }
+      )
     }
 
     const { memberId, teamId, role } = await req.json()

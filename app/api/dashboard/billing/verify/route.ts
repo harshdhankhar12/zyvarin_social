@@ -3,153 +3,177 @@ import { currentLoggedInUserInfo } from "@/utils/currentLogegdInUserInfo";
 import crypto from "crypto";
 import prisma from "@/lib/prisma";
 import { sendMail } from "@/utils/mail";
+import { redis } from "@/utils/redis";
+import { rateLimit } from "@/utils/rateLimiter";
+import { getClientIp } from "@/utils/ip";
 
 export async function POST(req: NextRequest) {
-  try {
-    const user = await currentLoggedInUserInfo();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    try {
+        const user = await currentLoggedInUserInfo();
+        if (!user) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
 
-    const {
-      razorpay_order_id,
-      razorpay_payment_id,
-      razorpay_signature,
-      paymentId,
-      planId,
-      orderId
-    } = await req.json();
+        const clientIp = getClientIp(req);
+        const userKey = `rl:verify_payment:user:${user.id}`;
+        const userAllowed = await rateLimit({ key: userKey, limit: 10, windowSeconds: 300 });
 
-    if (
-      !razorpay_order_id ||
-      !razorpay_payment_id ||
-      !razorpay_signature ||
-      !paymentId
-    ) {
-      return NextResponse.json(
-        { error: "Missing parameters" },
-        { status: 400 }
-      );
-    }
+        if (!userAllowed) {
+            return NextResponse.json(
+                { error: `Too many payment verification attempts. Try again in ${await redis.ttl(userKey)} seconds.` },
+                { status: 429 }
+            );
+        }
 
-    const key_secret = process.env.RAZORPAY_SECRET as string;
-    const body = razorpay_order_id + "|" + razorpay_payment_id;
-    const expectedSignature = crypto
-      .createHmac("sha256", key_secret)
-      .update(body)
-      .digest("hex");
+        const ipKey = `rl:verify_payment:ip:${clientIp}`;
+        const ipAllowed = await rateLimit({ key: ipKey, limit: 25, windowSeconds: 300 });
 
-    if (expectedSignature !== razorpay_signature) {
-      return NextResponse.json(
-        { error: "Invalid signature" },
-        { status: 400 }
-      );
-    }
+        if (!ipAllowed) {
+            return NextResponse.json(
+                { error: `Too many requests from this IP. Try again in ${await redis.ttl(ipKey)} seconds.` },
+                { status: 429 }
+            );
+        }
 
-    const transaction = await prisma.transaction.findUnique({
-      where: { id: paymentId },
-      include: { user: true },
-    });
+        const {
+            razorpay_order_id,
+            razorpay_payment_id,
+            razorpay_signature,
+            paymentId,
+            planId,
+            orderId
+        } = await req.json();
+
+        if (
+            !razorpay_order_id ||
+            !razorpay_payment_id ||
+            !razorpay_signature ||
+            !paymentId
+        ) {
+            return NextResponse.json(
+                { error: "Missing parameters" },
+                { status: 400 }
+            );
+        }
+
+        const key_secret = process.env.RAZORPAY_SECRET as string;
+        const body = razorpay_order_id + "|" + razorpay_payment_id;
+        const expectedSignature = crypto
+            .createHmac("sha256", key_secret)
+            .update(body)
+            .digest("hex");
+
+        if (expectedSignature !== razorpay_signature) {
+            return NextResponse.json(
+                { error: "Invalid signature" },
+                { status: 400 }
+            );
+        }
+
+        const transaction = await prisma.transaction.findUnique({
+            where: { id: paymentId },
+            include: { user: true },
+        });
 
 
-    if (!transaction) {
-      return NextResponse.json(
-        { error: "Transaction not found" },
-        { status: 404 }
-      );
-    }
+        if (!transaction) {
+            return NextResponse.json(
+                { error: "Transaction not found" },
+                { status: 404 }
+            );
+        }
 
-    if (transaction.user.email !== user.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+        if (transaction.user.email !== user.email) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
 
-    if (transaction.status === "SUCCESS") {
-      return NextResponse.json({ message: "Payment already verified" });
-    }
+        if (transaction.status === "SUCCESS") {
+            return NextResponse.json({ message: "Payment already verified" });
+        }
 
 
-    const invoice = await prisma.invoice.findFirst({
-      where: {
-        userId: user.id,
-        paymentGatewayId: razorpay_order_id,
-        invoiceStatus: "UNPAID"
-      },
-    });
+        const invoice = await prisma.invoice.findFirst({
+            where: {
+                userId: user.id,
+                paymentGatewayId: razorpay_order_id,
+                invoiceStatus: "UNPAID"
+            },
+        });
 
-    if (!invoice) {
-      return NextResponse.json(
-        { error: "Invoice not found" },
-        { status: 404 }
-      );
-    }
+        if (!invoice) {
+            return NextResponse.json(
+                { error: "Invoice not found" },
+                { status: 404 }
+            );
+        }
 
-    const updatedTransaction = await prisma.transaction.update({
-      where: { id: paymentId },
-      data: {
-        status: "SUCCESS",
-        transactionDate: new Date(),
-        additionalInfo: {
-          razorpay_order_id,
-          razorpay_payment_id,
-          razorpay_signature,
-          planId,
-        },
-      },
-    });
+        const updatedTransaction = await prisma.transaction.update({
+            where: { id: paymentId },
+            data: {
+                status: "SUCCESS",
+                transactionDate: new Date(),
+                additionalInfo: {
+                    razorpay_order_id,
+                    razorpay_payment_id,
+                    razorpay_signature,
+                    planId,
+                },
+            },
+        });
 
-    const updatedInvoice = await prisma.invoice.update({
-      where: { id: invoice.id },
-      data: {
-        invoiceStatus: "PAID",
-        paymentStatus: "SUCCESS",
-        paymentDate: new Date(),
-        paidDate: new Date(),
-        paymentMethod: "RAZORPAY",
-        paymentGatewayId: razorpay_payment_id,
-      },
-    });
+        const updatedInvoice = await prisma.invoice.update({
+            where: { id: invoice.id },
+            data: {
+                invoiceStatus: "PAID",
+                paymentStatus: "SUCCESS",
+                paymentDate: new Date(),
+                paidDate: new Date(),
+                paymentMethod: "RAZORPAY",
+                paymentGatewayId: razorpay_payment_id,
+            },
+        });
 
-    const nextBillingDate = new Date();
-    nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
+        const nextBillingDate = new Date();
+        nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
 
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        subscription_plan: planId,
-        next_billing_date: nextBillingDate,
-      },
-    });
+        await prisma.user.update({
+            where: { id: user.id },
+            data: {
+                subscription_plan: planId,
+                next_billing_date: nextBillingDate,
+            },
+        });
 
-    const planName = planId === "CREATOR" ? "Creator" : "Premium";
-    const planAmount = planId === "CREATOR" ? 499 : 999;
-    const taxAmount = Math.round(planAmount * 0.18);
-    const totalAmount = planAmount + taxAmount;
-    const invoiceNumber = updatedInvoice.invoiceNumber;
+        const planName = planId === "CREATOR" ? "Creator" : "Premium";
+        const planAmount = planId === "CREATOR" ? 499 : 999;
+        const taxAmount = Math.round(planAmount * 0.18);
+        const totalAmount = planAmount + taxAmount;
+        const invoiceNumber = updatedInvoice.invoiceNumber;
 
-    await prisma.notification.create({
-      data: {
-        userId: user.id,
-        title: "Payment Successful",
-        message: `Payment of ₹${totalAmount} for ${planName} plan has been processed successfully. Invoice: ${invoiceNumber}`,
-        isRead: false,
-      },
-    });
+        await prisma.notification.create({
+            data: {
+                userId: user.id,
+                title: "Payment Successful",
+                message: `Payment of ₹${totalAmount} for ${planName} plan has been processed successfully. Invoice: ${invoiceNumber}`,
+                isRead: false,
+            },
+        });
 
-    const invoiceDate = new Date(invoice.issueDate).toLocaleDateString("en-IN", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    });
+        const invoiceDate = new Date(invoice.issueDate).toLocaleDateString("en-IN", {
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+        });
 
-    const nextBillDate = nextBillingDate.toLocaleDateString("en-IN", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    });
+        const nextBillDate = nextBillingDate.toLocaleDateString("en-IN", {
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+        });
 
-    const subject = `Payment Confirmation - Invoice ${invoiceNumber}`;
-    const to = user.email;
-    const htmlContent = `
+        const subject = `Payment Confirmation - Invoice ${invoiceNumber}`;
+        const to = user.email;
+        const htmlContent = `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -314,30 +338,30 @@ export async function POST(req: NextRequest) {
 </body>
 </html>`;
 
-    await sendMail({
-      email: user.email,
-      to,
-      subject,
-      htmlContent,
-    });
+        await sendMail({
+            email: user.email,
+            to,
+            subject,
+            htmlContent,
+        });
 
-    return NextResponse.json({
-      message: "Payment verified successfully",
-      success: true,
-      paymentId: updatedTransaction.id,
-      invoiceNumber: invoiceNumber,
-      plan: planId,
-      nextBillingDate: nextBillingDate,
-      amount: totalAmount,
-    });
-  } catch (error) {
-    console.error("Error verifying payment:", error);
-    return NextResponse.json(
-      {
-        error: "Internal Server Error",
-        success: false
-      },
-      { status: 500 }
-    );
-  }
+        return NextResponse.json({
+            message: "Payment verified successfully",
+            success: true,
+            paymentId: updatedTransaction.id,
+            invoiceNumber: invoiceNumber,
+            plan: planId,
+            nextBillingDate: nextBillingDate,
+            amount: totalAmount,
+        });
+    } catch (error) {
+        console.error("Error verifying payment:", error);
+        return NextResponse.json(
+            {
+                error: "Internal Server Error",
+                success: false
+            },
+            { status: 500 }
+        );
+    }
 }

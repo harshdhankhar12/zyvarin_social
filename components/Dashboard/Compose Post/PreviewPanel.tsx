@@ -33,34 +33,40 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
   onRetryEdit
 }) => {
   const [activeTab, setActiveTab] = useState<string>('')
-  
+
   const previewAccounts = connectedAccounts.filter(acc => selectedPlatforms.includes(acc.provider))
-  
+  const previewAccountsWithKeys = previewAccounts.map((account, index) => ({
+    account,
+    key: `${account.provider}-${account.profileData?.id || account.profileData?.sub || account.profileData?.username || index}`
+  }))
+
   useEffect(() => {
-    if (previewAccounts.length > 0 && !activeTab) {
-      setActiveTab(previewAccounts[0].provider)
-    } else if (previewAccounts.length === 0) {
+    if (previewAccountsWithKeys.length > 0 && !activeTab) {
+      setActiveTab(previewAccountsWithKeys[0].key)
+    } else if (previewAccountsWithKeys.length === 0) {
       setActiveTab('')
-    } else if (!previewAccounts.find(acc => acc.provider === activeTab)) {
-      setActiveTab(previewAccounts[0].provider)
+    } else if (!previewAccountsWithKeys.find(acc => acc.key === activeTab)) {
+      setActiveTab(previewAccountsWithKeys[0].key)
     }
-  }, [selectedPlatforms, previewAccounts.length])
-  
-  const tabs = previewAccounts.map(account => ({
-    id: account.provider,
-    label: account.provider === 'linkedin' ? 'LinkedIn' : 
-           account.provider === 'twitter' ? 'Twitter' : 
-           account.provider === 'pinterest' ? 'Pinterest' :
-           account.provider === 'medium' ? 'Medium' :
-           account.provider === 'devto' ? 'Dev.to' : account.provider,
-    icon: getProviderIcon(account.provider)
+  }, [selectedPlatforms, previewAccountsWithKeys.length, activeTab])
+
+  const tabs = previewAccountsWithKeys.map(({ account, key }) => ({
+    id: key,
+    provider: account.provider,
+    label: account.provider === 'linkedin' ? 'LinkedIn' :
+      account.provider === 'twitter' ? 'Twitter' :
+        account.provider === 'pinterest' ? 'Pinterest' :
+          account.provider === 'medium' ? 'Medium' :
+            account.provider === 'devto' ? 'Dev.to' : account.provider,
+    icon: getProviderIcon(account.provider),
+    username: getUsername(account.provider, account.profileData)
   }))
 
   const formatContent = (text: string) => {
     if (!text) return null
-    
+
     const parts = text.split(/(\*\*.*?\*\*|\*.*?\*|#[A-Za-z0-9_]+)/g)
-    
+
     return parts.map((part, index) => {
       if (part.startsWith('**') && part.endsWith('**')) {
         return <strong key={index}>{part.slice(2, -2)}</strong>
@@ -87,11 +93,10 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
           </div>
 
           {result && (
-            <div className={`mt-5 p-4 rounded-lg border-2 ${
-              result.success 
-                ? 'bg-green-50 border-green-300 text-green-900' 
-                : 'bg-red-50 border-red-300 text-red-900'
-            }`}>
+            <div className={`mt-5 p-4 rounded-lg border-2 ${result.success
+              ? 'bg-green-50 border-green-300 text-green-900'
+              : 'bg-red-50 border-red-300 text-red-900'
+              }`}>
               <div className="flex items-start gap-3">
                 {result.success ? (
                   <div className="flex-shrink-0 p-1 bg-green-100 rounded-full">
@@ -103,9 +108,8 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
                   </div>
                 )}
                 <div className="flex-1">
-                  <h4 className={`text-sm font-bold mb-1 ${
-                    result.success ? 'text-green-900' : 'text-red-900'
-                  }`}>
+                  <h4 className={`text-sm font-bold mb-1 ${result.success ? 'text-green-900' : 'text-red-900'
+                    }`}>
                     {result.success ? '✓ Success' : '✗ Failed'}
                   </h4>
                   <p className="text-sm font-medium">{result.message}</p>
@@ -127,46 +131,61 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
     )
   }
 
-  const activeAccount = previewAccounts.find(acc => acc.provider === activeTab)
+  const activeAccountEntry = previewAccountsWithKeys.find(acc => acc.key === activeTab)
+  const activeAccount = activeAccountEntry?.account
+  const activeProvider = activeAccount?.provider || ''
 
-  const Icon = getProviderIcon(activeTab)
-  const colorClass = getProviderColor(activeTab)
-  const bgClass = getProviderBgColor(activeTab)
-  const profileImg = getProfileImage(activeTab, connectedAccounts)
+  const Icon = getProviderIcon(activeProvider)
+  const colorClass = getProviderColor(activeProvider)
+  const bgClass = getProviderBgColor(activeProvider)
+  const profileImg = getProfileImage(activeProvider, connectedAccounts)
 
   return (
-    <div className="w-full lg:w-[30%] flex flex-col border-l border-slate-200">
-      <div className="flex-1 p-6 overflow-y-auto">
-        <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wide mb-4">Preview</h3>
-        
-        <div className="flex border-b border-slate-200 mb-6">
-          {tabs.map((tab) => {
-            const TabIcon = tab.icon
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-colors ${
-                  activeTab === tab.id 
-                    ? 'border-blue-600 text-blue-600' 
+    <div className="w-full lg:w-[30%] h-full min-h-0 flex flex-col border-l border-slate-200 min-w-0">
+      <div className="flex-1 p-4 sm:p-6 overflow-y-auto compose-scroll min-h-0">
+        <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wide mb-4 break-words">Preview</h3>
+
+        <div className="sticky top-0 z-10 bg-white pb-3 -mt-1">
+          <div role="tablist" aria-label="Preview accounts" className="flex border-b border-slate-200 mb-3 overflow-x-auto">
+            {tabs.map((tab) => {
+              const TabIcon = tab.icon
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  role="tab"
+                  aria-selected={activeTab === tab.id}
+                  aria-controls={`preview-panel-${tab.id}`}
+                  id={`preview-tab-${tab.id}`}
+                  className={`flex items-center gap-2 px-3 sm:px-4 py-3 border-b-2 transition-colors whitespace-nowrap ${activeTab === tab.id
+                    ? 'border-blue-600 text-blue-600'
                     : 'border-transparent text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                <TabIcon className="w-4 h-4" />
-                <span className="text-sm font-medium">
-                  {tab.label}
-                </span>
-              </button>
-            )
-          })}
+                    }`}
+                >
+                  <TabIcon className="w-4 h-4" />
+                  <span className="text-sm font-medium">
+                    {tab.label}
+                  </span>
+                  <span className="text-xs text-slate-400 truncate max-w-24">
+                    {tab.username}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
         </div>
-        
-        <div className="bg-white border border-slate-200 rounded-lg p-5">
+
+        <div
+          role="tabpanel"
+          id={`preview-panel-${activeTab}`}
+          aria-labelledby={`preview-tab-${activeTab}`}
+          className="bg-white border border-slate-200 rounded-lg p-4 sm:p-5"
+        >
           <div className="flex items-center gap-3 mb-4">
             {profileImg ? (
-              <img 
-                src={profileImg} 
-                alt="Profile" 
+              <img
+                src={profileImg}
+                alt="Profile"
                 className="w-10 h-10 rounded-full object-cover"
               />
             ) : (
@@ -177,30 +196,30 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
               </div>
             )}
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap min-w-0">
                 <p className="text-sm font-semibold text-slate-900 truncate">
                   {getUsername(activeTab, activeAccount?.profileData)}
                 </p>
                 <div className={`px-2 py-1 rounded-full text-xs ${bgClass}`}>
                   <span className={colorClass.split(' ')[0]}>
-                    {activeTab === 'linkedin' ? 'LinkedIn' : 
-                     activeTab === 'twitter' ? 'Twitter' : 
-                     activeTab === 'pinterest' ? 'Pinterest' :
-                      activeTab === 'medium' ? 'Medium' :
-                       activeTab === 'devto' ? 'Dev.to' : activeTab}
+                    {activeProvider === 'linkedin' ? 'LinkedIn' :
+                      activeProvider === 'twitter' ? 'Twitter' :
+                        activeProvider === 'pinterest' ? 'Pinterest' :
+                          activeProvider === 'medium' ? 'Medium' :
+                            activeProvider === 'devto' ? 'Dev.to' : activeProvider}
                   </span>
                 </div>
               </div>
               <p className="text-xs text-slate-500 truncate">
-                {activeTab === 'twitter' ? 'Tweet' : 'Post'}
+                {activeProvider === 'twitter' ? 'Tweet' : 'Post'}
               </p>
             </div>
           </div>
-          
-          <div className="text-sm text-slate-800 whitespace-pre-wrap leading-relaxed mb-4">
+
+          <div className="text-sm text-slate-800 whitespace-pre-wrap break-words leading-relaxed mb-4">
             {formatContent(content)}
           </div>
-          
+
           {uploadLoading && (
             <div className="mt-4 pt-4 border-t border-slate-100">
               <div className="grid grid-cols-1 gap-2">
@@ -214,18 +233,16 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
               </div>
             </div>
           )}
-          
+
           {!uploadLoading && mediaUrls.length > 0 && (
             <div className="mt-4 pt-4 border-t border-slate-100">
-              <div className={`grid gap-2 ${
-                mediaUrls.length === 1 ? 'grid-cols-1' :
+              <div className={`grid gap-2 ${mediaUrls.length === 1 ? 'grid-cols-1' :
                 mediaUrls.length === 2 ? 'grid-cols-2' :
-                mediaUrls.length === 3 ? 'grid-cols-2' : 'grid-cols-2'
-              }`}>
+                  mediaUrls.length === 3 ? 'grid-cols-2' : 'grid-cols-2'
+                }`}>
                 {mediaUrls.slice(0, 4).map((url, index) => (
-                  <div key={index} className={`${
-                    mediaUrls.length === 3 && index === 0 ? 'col-span-2' : ''
-                  }`}>
+                  <div key={index} className={`${mediaUrls.length === 3 && index === 0 ? 'col-span-2' : ''
+                    }`}>
                     <div className={`${mediaCrops[index] === 'square' ? 'aspect-square' : mediaCrops[index] === 'wide' ? 'aspect-video' : ''} w-full overflow-hidden rounded border border-slate-200 bg-slate-50`}>
                       <img
                         src={url}
@@ -243,8 +260,8 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
               </div>
             </div>
           )}
-          
-          {activeTab === 'twitter' && content.length > 280 && (
+
+          {activeProvider === 'twitter' && content.length > 280 && (
             <div className="mt-4 p-3 bg-red-50 border border-red-100 rounded">
               <div className="flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
@@ -252,7 +269,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
               </div>
             </div>
           )}
-          {activeTab === 'pinterest' && content.length > 500 && (
+          {activeProvider === 'pinterest' && content.length > 500 && (
             <div className="mt-4 p-3 bg-red-50 border border-red-100 rounded">
               <div className="flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
@@ -263,11 +280,10 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
         </div>
 
         {result && (
-          <div className={`mt-5 p-4 rounded-lg border-2 ${
-            result.success 
-              ? 'bg-green-50 border-green-300 text-green-900' 
-              : 'bg-red-50 border-red-300 text-red-900'
-          }`}>
+          <div className={`mt-5 p-4 rounded-lg border-2 ${result.success
+            ? 'bg-green-50 border-green-300 text-green-900'
+            : 'bg-red-50 border-red-300 text-red-900'
+            }`}>
             <div className="flex items-start gap-3">
               {result.success ? (
                 <div className="flex-shrink-0 p-1 bg-green-100 rounded-full">
@@ -279,9 +295,8 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
                 </div>
               )}
               <div className="flex-1">
-                <h4 className={`text-sm font-bold mb-1 ${
-                  result.success ? 'text-green-900' : 'text-red-900'
-                }`}>
+                <h4 className={`text-sm font-bold mb-1 ${result.success ? 'text-green-900' : 'text-red-900'
+                  }`}>
                   {result.success ? '✓ Success' : '✗ Failed'}
                 </h4>
                 <p className="text-sm font-medium">{result.message}</p>

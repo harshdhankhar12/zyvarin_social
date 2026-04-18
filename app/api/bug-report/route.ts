@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { currentLoggedInUserInfo } from '@/utils/currentLogegdInUserInfo'
 import prisma from '@/lib/prisma'
+import { redis } from '@/utils/redis'
+import { rateLimit } from '@/utils/rateLimiter'
+import { getClientIp } from '@/utils/ip'
 
 export async function POST(req: NextRequest) {
   try {
@@ -8,6 +11,27 @@ export async function POST(req: NextRequest) {
 
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const clientIp = getClientIp(req)
+    const userKey = `rl:submit_bug:user:${session.id}`
+    const userAllowed = await rateLimit({ key: userKey, limit: 10, windowSeconds: 300 })
+
+    if (!userAllowed) {
+      return NextResponse.json(
+        { error: `Too many bug report submissions. Try again in ${await redis.ttl(userKey)} seconds.` },
+        { status: 429 }
+      )
+    }
+
+    const ipKey = `rl:submit_bug:ip:${clientIp}`
+    const ipAllowed = await rateLimit({ key: ipKey, limit: 25, windowSeconds: 300 })
+
+    if (!ipAllowed) {
+      return NextResponse.json(
+        { error: `Too many requests from this IP. Try again in ${await redis.ttl(ipKey)} seconds.` },
+        { status: 429 }
+      )
     }
 
     const { title, description, category, severity, page, screenshot } = await req.json()
@@ -29,10 +53,10 @@ export async function POST(req: NextRequest) {
       }
     })
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       bugReport,
-      message: 'Bug report submitted successfully' 
+      message: 'Bug report submitted successfully'
     })
   } catch (error) {
     console.error('Bug report error:', error)

@@ -1,11 +1,35 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { currentLoggedInUserInfo } from "@/utils/currentLogegdInUserInfo";
+import { redis } from "@/utils/redis";
+import { rateLimit } from "@/utils/rateLimiter";
+import { getClientIp } from "@/utils/ip";
 
 export async function POST(req: NextRequest) {
   const session = await currentLoggedInUserInfo();
   if (!session || typeof session === 'boolean') {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const clientIp = getClientIp(req);
+  const userKey = `rl:accept_invite:user:${session.id}`;
+  const userAllowed = await rateLimit({ key: userKey, limit: 10, windowSeconds: 300 });
+
+  if (!userAllowed) {
+    return NextResponse.json(
+      { error: `Too many invite acceptance requests. Try again in ${await redis.ttl(userKey)} seconds.` },
+      { status: 429 }
+    );
+  }
+
+  const ipKey = `rl:accept_invite:ip:${clientIp}`;
+  const ipAllowed = await rateLimit({ key: ipKey, limit: 25, windowSeconds: 300 });
+
+  if (!ipAllowed) {
+    return NextResponse.json(
+      { error: `Too many requests from this IP. Try again in ${await redis.ttl(ipKey)} seconds.` },
+      { status: 429 }
+    );
   }
 
   try {
@@ -120,7 +144,7 @@ export async function POST(req: NextRequest) {
         })
       ]);
 
-      return NextResponse.json({ 
+      return NextResponse.json({
         message: "Successfully joined team",
         teamSlug: invite.team.slug
       }, { status: 200 });

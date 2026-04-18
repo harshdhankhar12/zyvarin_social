@@ -59,7 +59,6 @@ export async function GET(request: NextRequest) {
     const tokenData = await tokenResponse.json()
     const { access_token, expires_in } = tokenData
 
-    console.log('✅ Token received:', { access_token: access_token?.substring(0, 20) + '...' })
 
     const profileResponse = await fetch('https://api.linkedin.com/v2/userinfo', {
       headers: {
@@ -75,7 +74,6 @@ export async function GET(request: NextRequest) {
     }
 
     const profileData = await profileResponse.json()
-    console.log('📋 Profile data received:', profileData)
 
     if (!profileData.sub) {
       console.error('No user ID (sub) in profile data:', profileData)

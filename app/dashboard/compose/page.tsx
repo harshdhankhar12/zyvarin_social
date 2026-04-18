@@ -2,10 +2,10 @@ import ComposeContent from '@/components/Dashboard/Compose Post/ComposeContent'
 import React from 'react'
 import { currentLoggedInUserInfo } from '@/utils/currentLogegdInUserInfo'
 import prisma from '@/lib/prisma'
-import { 
-  getRemainingAIGenerations, 
-  getRemainingPosts, 
-  canCreateAIContent, 
+import {
+  getRemainingAIGenerations,
+  getRemainingPosts,
+  canCreateAIContent,
   canPublishPost,
   getUsageProgress,
   currentUserPlan
@@ -95,8 +95,8 @@ const page = async () => {
   }
 
   return (
-    <div>
-      <ComposeContent 
+    <div className="h-full min-h-0 bg-white">
+      <ComposeContent
         connectedAccounts={connectedAccounts}
         hasLinkedin={!!linkedinAccount}
         hasTwitter={!!twitterAccount}
