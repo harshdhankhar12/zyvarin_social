@@ -8,6 +8,8 @@ const CACHE_KEY = 'cache:maintenance:active'
 const CACHE_TTL_SECONDS = 30
 
 export async function GET() {
+  const now = new Date()
+
   const cached = await redis.get(CACHE_KEY)
   if (cached) {
     return NextResponse.json(JSON.parse(cached))
