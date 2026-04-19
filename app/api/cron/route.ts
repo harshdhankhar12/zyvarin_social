@@ -342,14 +342,14 @@ export async function GET(req: NextRequest) {
   try {
     const authHeader = req.headers.get('authorization')
     const cronSecret = process.env.CRON_SECRET
+    await checkCronTime().catch(error => {
+      console.error('Cron test email failed:', error)
+    })
 
     if (!cronSecret || authHeader !== `Bearer ${cronSecret} `) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    await checkCronTime().catch(error => {
-      console.error('Cron test email failed:', error)
-    })
 
     const lock = await redis.setnx(cronLockKey, new Date().toISOString())
     if (!lock) {
