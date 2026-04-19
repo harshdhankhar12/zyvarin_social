@@ -347,6 +347,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    await checkCronTime().catch(error => {
+      console.error('Cron test email failed:', error)
+    })
+
     const lock = await redis.setnx(cronLockKey, new Date().toISOString())
     if (!lock) {
       return NextResponse.json({ success: true, skipped: true, message: 'Cron already running' })
