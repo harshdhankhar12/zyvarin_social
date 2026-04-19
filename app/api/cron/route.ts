@@ -25,10 +25,17 @@ async function checkCronTime() {
     </div>
   `
   await sendMail({
-    to: process.env.EMAIL_USER!,
+    to: process.env.ADMIN_EMAIL || '',
     subject,
     htmlContent
   })
+
+
+  return {
+    success: true,
+  }
+
+
 }
 
 
@@ -68,7 +75,7 @@ async function handlePendingTransactions() {
           userId: transaction.user.id,
           senderType: 'SYSTEM',
           title: '❌ Transaction Failed',
-          message: `Your transaction (₹${transaction.amount}) could not be processed. Please try again or contact support.`,
+          message: `Your transaction(₹${transaction.amount}) could not be processed.Please try again or contact support.`,
           isRead: false
         }
       })
@@ -112,7 +119,7 @@ async function handlePendingInvoices() {
         userId: invoice.user.id,
         senderType: 'SYSTEM',
         title: '❌ Invoice Payment Failed',
-        message: `Invoice #${invoice.id.slice(0, 8)} for ₹${invoice.totalAmount} has expired. Please generate a new payment link.`,
+        message: `Invoice #${invoice.id.slice(0, 8)} for ₹${invoice.totalAmount} has expired.Please generate a new payment link.`,
         isRead: false
       }
     })
@@ -149,17 +156,17 @@ async function handleSubscriptionExpiry() {
         to: user.email,
         subject: '⏰ Your Zyvarin Subscription Expires in 7 Days',
         htmlContent: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <h2 style="color: #333;">Hi ${user.fullName},</h2>
-            <p style="font-size: 16px; color: #555;">Your <strong>${user.subscription_plan}</strong> plan will expire on <strong>${user.next_billing_date?.toLocaleDateString()}</strong>.</p>
-            <p style="font-size: 16px; color: #555;">To continue enjoying premium features, please renew your subscription before the expiry date.</p>
-            <p style="font-size: 16px; color: #555;">If you don't renew, your account will be automatically downgraded to the FREE plan.</p>
-            <div style="margin: 30px 0;">
-              <a href="${process.env.NEXTAUTH_URL}/dashboard/billing" style="background-color: #4F46E5; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">Renew Now</a>
-            </div>
-            <p style="font-size: 14px; color: #888;">Thank you for using Zyvarin!</p>
-          </div>
-        `
+    < div style = "font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;" >
+      <h2 style="color: #333;" > Hi ${user.fullName}, </h2>
+        < p style = "font-size: 16px; color: #555;" > Your < strong > ${user.subscription_plan} </> plan will expire on <strong>${user.next_billing_date?.toLocaleDateString()}</strong >.</p>
+          < p style = "font-size: 16px; color: #555;" > To continue enjoying premium features, please renew your subscription before the expiry date.</>
+            < p style = "font-size: 16px; color: #555;" > If you don't renew, your account will be automatically downgraded to the FREE plan.</>
+              < div style = "margin: 30px 0;" >
+                <a href="${process.env.NEXTAUTH_URL}/dashboard/billing" style = "background-color: #4F46E5; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;" > Renew Now </a>
+                  </>
+                  < p style = "font-size: 14px; color: #888;" > Thank you for using Zyvarin!</>
+                    </div>
+                      `
       })
 
       await prisma.notification.create({
@@ -167,14 +174,14 @@ async function handleSubscriptionExpiry() {
           userId: user.id,
           senderType: 'SYSTEM',
           title: '⏰ Subscription Expiring Soon',
-          message: `Your ${user.subscription_plan} plan expires in 7 days. Renew now to keep your premium features.`,
+          message: `Your ${user.subscription_plan} plan expires in 7 days.Renew now to keep your premium features.`,
           isRead: false
         }
       })
 
       remindersSent++
     } catch (error) {
-      console.error(`Failed to send expiry reminder to ${user.email}:`, error)
+      console.error(`Failed to send expiry reminder to ${user.email}: `, error)
     }
   }
 
@@ -205,17 +212,17 @@ async function handleSubscriptionExpiry() {
         to: user.email,
         subject: '📉 Your Zyvarin Subscription Has Expired',
         htmlContent: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <h2 style="color: #333;">Hi ${user.fullName},</h2>
-            <p style="font-size: 16px; color: #555;">Your <strong>${user.subscription_plan}</strong> plan has expired and your account has been downgraded to the <strong>FREE</strong> plan.</p>
-            <p style="font-size: 16px; color: #555;">You can still access basic features, but premium capabilities are now limited.</p>
-            <p style="font-size: 16px; color: #555;">Want to regain full access? Upgrade anytime!</p>
-            <div style="margin: 30px 0;">
-              <a href="${process.env.NEXTAUTH_URL}/pricing" style="background-color: #4F46E5; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">View Plans</a>
-            </div>
-            <p style="font-size: 14px; color: #888;">Thank you for using Zyvarin!</p>
-          </div>
-        `
+    < div style = "font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;" >
+      <h2 style="color: #333;" > Hi ${user.fullName}, </h2>
+        < p style = "font-size: 16px; color: #555;" > Your < strong > ${user.subscription_plan} </> plan has expired and your account has been downgraded to the <strong>FREE</strong > plan.</p>
+          < p style = "font-size: 16px; color: #555;" > You can still access basic features, but premium capabilities are now limited.</>
+            < p style = "font-size: 16px; color: #555;" > Want to regain full access ? Upgrade anytime! </>
+              < div style = "margin: 30px 0;" >
+                <a href="${process.env.NEXTAUTH_URL}/pricing" style = "background-color: #4F46E5; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;" > View Plans </a>
+                  </>
+                  < p style = "font-size: 14px; color: #888;" > Thank you for using Zyvarin!</>
+                    </div>
+                      `
       })
 
       await prisma.notification.create({
@@ -223,14 +230,14 @@ async function handleSubscriptionExpiry() {
           userId: user.id,
           senderType: 'SYSTEM',
           title: '📉 Subscription Expired',
-          message: `Your subscription has expired. Your account has been downgraded to FREE plan. Upgrade anytime to restore premium features.`,
+          message: `Your subscription has expired.Your account has been downgraded to FREE plan.Upgrade anytime to restore premium features.`,
           isRead: false
         }
       })
 
       downgradedCount++
     } catch (error) {
-      console.error(`Failed to downgrade user ${user.email}:`, error)
+      console.error(`Failed to downgrade user ${user.email}: `, error)
     }
   }
 
@@ -336,7 +343,7 @@ export async function GET(req: NextRequest) {
     const authHeader = req.headers.get('authorization')
     const cronSecret = process.env.CRON_SECRET
 
-    if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+    if (!cronSecret || authHeader !== `Bearer ${cronSecret} `) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -387,7 +394,7 @@ export async function GET(req: NextRequest) {
               userId: post.socialProvider.user.id,
               senderType: 'SYSTEM',
               title: '✅ Post Published Successfully',
-              message: `Your scheduled post was published to ${platform}`,
+              message: `Your scheduled post was published to ${platform} `,
               isRead: false
             }
           })
@@ -412,7 +419,7 @@ export async function GET(req: NextRequest) {
               userId: post.socialProvider.user.id,
               senderType: 'SYSTEM',
               title: '❌ Post Publishing Failed',
-              message: `Failed to publish your scheduled post to ${platform}`,
+              message: `Failed to publish your scheduled post to ${platform} `,
               isRead: false
             }
           })
@@ -426,7 +433,7 @@ export async function GET(req: NextRequest) {
           })
         }
       } catch (error: any) {
-        console.error(`Error processing post ${post.id}:`, error.message)
+        console.error(`Error processing post ${post.id}: `, error.message)
 
         await prisma.post.update({
           where: { id: post.id },
