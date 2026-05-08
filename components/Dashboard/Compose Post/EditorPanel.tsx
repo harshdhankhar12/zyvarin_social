@@ -3,7 +3,7 @@
 import React, { useRef, useState } from 'react'
 import {
   ImageIcon, Calendar, Wand2, ChevronDown,
-  Clock, Loader2, Check, X, Upload, Bold, Italic
+  Clock, Loader2, Check, X, Upload, Bold, Italic, Youtube
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -14,6 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import YouTubeModal from './YouTubeModal'
 
 interface EditorPanelProps {
   content: string
@@ -48,6 +49,8 @@ interface EditorPanelProps {
     hasReachedLimit: boolean;
   }
   userPlan: string | null
+  connectedAccounts?: Array<{ provider: string; profileData: any }>
+  userTimezone?: string | null
 }
 
 const EditorPanel: React.FC<EditorPanelProps> = ({
@@ -75,7 +78,9 @@ const EditorPanel: React.FC<EditorPanelProps> = ({
   onUpdateMediaAlt,
   onUpdateMediaCrop,
   aiLimits,
-  userPlan
+  userPlan,
+  connectedAccounts = [],
+  userTimezone = null
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -84,6 +89,7 @@ const EditorPanel: React.FC<EditorPanelProps> = ({
   const [showScheduleMenu, setShowScheduleMenu] = useState(false)
   const [selectedDate, setSelectedDate] = useState('')
   const [selectedTime, setSelectedTime] = useState('')
+  const [showYouTubeModal, setShowYouTubeModal] = useState(false)
 
   const applyFormatting = (format: 'bold' | 'italic') => {
     const textarea = textareaRef.current
@@ -180,6 +186,19 @@ const EditorPanel: React.FC<EditorPanelProps> = ({
     const now = new Date()
     now.setMinutes(now.getMinutes() + 5)
     return now.toISOString().slice(0, 16)
+  }
+
+  const handleYouTubeContentGenerated = (generatedContent: string, platform: string) => {
+    // Append the generated content to the existing content
+    const separator = content.trim() ? '\n\n---\n\n' : ''
+    const newContent = content + separator + generatedContent
+    setContent(newContent)
+    setShowYouTubeModal(false)
+
+    // Auto-select the platform if not already selected
+    if (!selectedPlatforms.includes(platform)) {
+      // We could auto-select, but let user decide
+    }
   }
 
   return (
@@ -471,6 +490,19 @@ const EditorPanel: React.FC<EditorPanelProps> = ({
                   {uploadLoading ? `Uploading ${uploadProgress > 0 ? uploadProgress + '%' : '...'}` : 'Add Image'}
                 </span>
               </button>
+
+              <button
+                onClick={() => setShowYouTubeModal(true)}
+                disabled={connectedAccounts.length === 0}
+                className={`p-2 rounded transition-colors flex items-center gap-1 ${connectedAccounts.length === 0
+                  ? 'text-slate-400 cursor-not-allowed'
+                  : 'text-slate-500 hover:text-red-600 hover:bg-red-50'
+                  }`}
+                title="Generate content from YouTube video"
+              >
+                <Youtube className="w-4 h-4" />
+                <span className="text-xs">YouTube</span>
+              </button>
               {userPlan !== 'FREE' && (
                 <div className="relative">
                   <button
@@ -606,6 +638,14 @@ const EditorPanel: React.FC<EditorPanelProps> = ({
           </div>
         </div>
       </div>
+
+      <YouTubeModal
+        isOpen={showYouTubeModal}
+        onClose={() => setShowYouTubeModal(false)}
+        connectedPlatforms={connectedAccounts}
+        onContentGenerated={handleYouTubeContentGenerated}
+        userTimezone={userTimezone}
+      />
     </div>
   )
 }

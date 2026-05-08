@@ -82,6 +82,7 @@ const ConnectAccounts = ({
   useEffect(() => {
     const err = searchParams.get('error')
     const suc = searchParams.get('success')
+    const info = searchParams.get('info')
     if (err || suc) {
       const mapError = (code: string) => {
         switch (code) {
@@ -99,6 +100,20 @@ const ConnectAccounts = ({
             return 'LinkedIn connection failed. Please try again.'
           case 'twitter_connection_failed':
             return 'Twitter connection failed. Please try again.'
+          case 'twitter_wrong_keys':
+            return 'Twitter OAuth1 requires API Key and API Secret Key. Your current X_CLIENT_ID looks like an OAuth2 Client ID. Set X_API_KEY and X_API_SECRET using OAuth1 credentials from X Developer Portal.'
+          case 'twitter_request_token_failed':
+            return `Twitter request token failed. ${info ? decodeURIComponent(info) : 'Please verify OAuth1 app keys and callback URL.'}`
+          case 'twitter_request_token_invalid':
+            return 'Twitter request token response was invalid. Verify your app keys and callback URL in X Developer Portal.'
+          case 'twitter_access_token_failed':
+            return `Twitter access token exchange failed. ${info ? decodeURIComponent(info) : 'Please verify OAuth1 app settings and permissions.'}`
+          case 'twitter_permission_denied':
+            return 'Twitter app permissions are insufficient for this account. Check app access level in the X developer portal and ensure OAuth 1.0a user auth is enabled.'
+          case 'twitter_missing_config':
+            return 'Twitter app configuration is missing. Please set X_API_KEY and X_API_SECRET (OAuth1), or fallback to X_CLIENT_ID and X_CLIENT_SECRET.'
+          case 'twitter_client_forbidden':
+            return `Twitter app is not enrolled or attached to a Project. Visit the Twitter developer portal to attach your app: ${info ? decodeURIComponent(info) : 'https://developer.twitter.com/en/docs/projects/overview'}`
           default:
             return 'Action failed. Please try again.'
         }
@@ -150,7 +165,7 @@ const ConnectAccounts = ({
       color: 'text-red-600',
       bgColor: 'bg-red-50',
       description: 'Visual discovery and bookmarking',
-      isAvailable: false,
+      isAvailable: true,
     },
     {
       id: 'devto',
@@ -258,7 +273,7 @@ const ConnectAccounts = ({
       } else if (platformId === 'devto') {
         setShowDevToModal(true)
         setLoadingPlatform(null)
-      }else if (platformId === 'pinterest') {
+      } else if (platformId === 'pinterest') {
         window.location.href = '/api/social/pinterest/connect'
       }
     } catch (err) {
@@ -391,8 +406,8 @@ const ConnectAccounts = ({
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm font-medium text-slate-600">Connected Platforms</h3>
               <span className={`text-xs px-2 py-1 rounded-full ${limits.platforms.percentage >= 90 ? 'bg-red-100 text-red-600' :
-                  limits.platforms.percentage >= 70 ? 'bg-amber-100 text-amber-600' :
-                    'bg-emerald-100 text-emerald-600'
+                limits.platforms.percentage >= 70 ? 'bg-amber-100 text-amber-600' :
+                  'bg-emerald-100 text-emerald-600'
                 }`}>
                 {limits.platforms.percentage}%
               </span>

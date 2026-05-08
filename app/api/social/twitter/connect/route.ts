@@ -3,6 +3,52 @@ import { NextResponse } from "next/server"
 import crypto from "crypto"
 import { canConnectMorePlatforms } from "@/app/dashboard/pricingUtils"
 
+function percentEncode(str: string) {
+  return encodeURIComponent(str)
+    .replace(/!/g, '%21')
+    .replace(/'/g, '%27')
+    .replace(/\(/g, '%28')
+    .replace(/\)/g, '%29')
+    .replace(/\*/g, '%2A')
+}
+
+function generateNonce(length = 32) {
+  return crypto.randomBytes(Math.ceil(length / 2)).toString('hex')
+}
+
+function buildOAuthHeader(method: string, baseUrl: string, params: Record<string, string>, consumerKey: string, consumerSecret: string, token = '', tokenSecret = '') {
+  const oauthParams: Record<string, string> = {
+    oauth_consumer_key: consumerKey,
+    oauth_nonce: generateNonce(16),
+    oauth_signature_method: 'HMAC-SHA1',
+    oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
+    oauth_version: '1.0',
+  }
+
+  const allParams: Record<string, string> = { ...oauthParams, ...params }
+  if (token) allParams['oauth_token'] = token
+
+  const encodedParams = Object.keys(allParams)
+    .sort()
+    .map(k => `${percentEncode(k)}=${percentEncode(allParams[k])}`)
+    .join('&')
+
+  const baseString = [method.toUpperCase(), percentEncode(baseUrl), percentEncode(encodedParams)].join('&')
+  const signingKey = `${percentEncode(consumerSecret)}&${tokenSecret ? percentEncode(tokenSecret) : ''}`
+  const signature = crypto.createHmac('sha1', signingKey).update(baseString).digest('base64')
+
+  const headerParams: Record<string, string> = {
+    ...oauthParams,
+    oauth_signature: signature,
+  }
+  if (token) headerParams['oauth_token'] = token
+
+  return 'OAuth ' + Object.keys(headerParams)
+    .sort()
+    .map(k => `${percentEncode(k)}="${percentEncode(headerParams[k])}"`)
+    .join(', ')
+}
+
 export async function GET(req: Request) {
   try {
     const session = await currentLoggedInUserInfo()
@@ -42,33 +88,51 @@ export async function GET(req: Request) {
       return NextResponse.redirect(`${baseUrl}/dashboard/connect-accounts?error=platform_limit_reached`)
     }
 
-    const codeVerifier = crypto.randomBytes(32).toString('base64url')
-    const codeChallenge = crypto
-      .createHash('sha256')
-      .update(codeVerifier)
-      .digest('base64url')
-
-    const stateData = {
-      userId: session.id,
-      timestamp: Date.now(),
-      codeVerifier: codeVerifier,
-      nonce: crypto.randomBytes(16).toString('hex')
+    const consumerKey = process.env.X_API_KEY || process.env.X_CLIENT_ID || ''
+    const consumerSecret = process.env.X_API_SECRET || process.env.X_CLIENT_SECRET || ''
+    if (!consumerKey || !consumerSecret) {
+      return NextResponse.redirect(`${baseUrl}/dashboard/connect-accounts?error=twitter_missing_config`)
     }
 
-    const state = Buffer.from(JSON.stringify(stateData)).toString('base64')
+    // OAuth 1.0a needs API Key/Secret (consumer key/secret), not OAuth2 client id.
+    // OAuth2 client ids usually contain colon segments like "xxx:1:ci".
+    if (consumerKey.includes(':')) {
+      return NextResponse.redirect(`${baseUrl}/dashboard/connect-accounts?error=twitter_wrong_keys`)
+    }
 
-    const redirectUri = `${baseUrl}/api/social/twitter/callback`
+    const callbackUrl = `${baseUrl}/api/social/twitter/callback`
+    const requestTokenUrl = 'https://api.twitter.com/oauth/request_token'
+    const params = { oauth_callback: callbackUrl }
+    const authHeader = buildOAuthHeader('POST', requestTokenUrl, params, consumerKey, consumerSecret)
 
-    const twitterAuthUrl = new URL('https://twitter.com/i/oauth2/authorize')
-    twitterAuthUrl.searchParams.set('response_type', 'code')
-    twitterAuthUrl.searchParams.set('client_id', process.env.X_CLIENT_ID!)
-    twitterAuthUrl.searchParams.set('redirect_uri', redirectUri)
-    twitterAuthUrl.searchParams.set('scope', 'tweet.read tweet.write users.read offline.access')
-    twitterAuthUrl.searchParams.set('state', state)
-    twitterAuthUrl.searchParams.set('code_challenge', codeChallenge)
-    twitterAuthUrl.searchParams.set('code_challenge_method', 'S256')
+    const requestTokenResponse = await fetch(requestTokenUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: authHeader,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: new URLSearchParams({ oauth_callback: callbackUrl }).toString()
+    })
 
-    return NextResponse.redirect(twitterAuthUrl.toString())
+    const requestTokenBody = await requestTokenResponse.text()
+    if (!requestTokenResponse.ok) {
+      console.error('Request token failed:', requestTokenBody)
+      const info = encodeURIComponent(requestTokenBody.slice(0, 300))
+      return NextResponse.redirect(`${baseUrl}/dashboard/connect-accounts?error=twitter_request_token_failed&info=${info}`)
+    }
+
+    const requestParams = new URLSearchParams(requestTokenBody)
+    const oauthToken = requestParams.get('oauth_token')
+    const oauthTokenSecret = requestParams.get('oauth_token_secret')
+
+    if (!oauthToken || !oauthTokenSecret) {
+      console.error('Invalid request token response:', requestTokenBody)
+      return NextResponse.redirect(`${baseUrl}/dashboard/connect-accounts?error=twitter_request_token_invalid`)
+    }
+
+    const redirect = NextResponse.redirect(`https://api.twitter.com/oauth/authenticate?oauth_token=${oauthToken}`)
+    redirect.cookies.set('twitter_oauth_token_secret', oauthTokenSecret, { httpOnly: true, path: '/', maxAge: 300 })
+    return redirect
 
   } catch (error) {
     console.error('Twitter connect error:', error)

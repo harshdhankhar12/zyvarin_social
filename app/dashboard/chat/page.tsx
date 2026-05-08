@@ -180,7 +180,7 @@ const Page = () => {
     const messagesEndRef = useRef<HTMLDivElement | null>(null)
     const inputRef = useRef<HTMLTextAreaElement | null>(null)
 
-    const isDisabled = true;
+    const isDisabled = false;
 
     if (isDisabled) {
         return window.location.href = '/dashboard'

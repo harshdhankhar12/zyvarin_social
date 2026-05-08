@@ -327,6 +327,8 @@ const ComposeContent = ({
           onUpdateMediaCrop={updateMediaCrop}
           aiLimits={aiLimits}
           userPlan={userPlan}
+          connectedAccounts={connectedAccounts}
+          userTimezone={userTimezone}
         />
 
         <PreviewPanel
