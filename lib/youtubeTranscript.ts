@@ -24,11 +24,28 @@ export async function getYouTubeTranscript(youtubeUrl: string): Promise<Transcri
             apiKey,
         });
 
-        const transcript = await supadata.transcript({
+        const transcript: any = await supadata.transcript({
             url: youtubeUrl,
         });
 
-        return transcript;
+        const normalizedContent: TranscriptSegment[] = Array.isArray(transcript?.content)
+            ? transcript.content.map((segment: any, index: number) => ({
+                text: typeof segment?.text === 'string' ? segment.text : String(segment?.text ?? ''),
+                offset: typeof segment?.offset === 'number' ? segment.offset : index,
+                duration: typeof segment?.duration === 'number' ? segment.duration : 0,
+                lang: typeof segment?.lang === 'string' ? segment.lang : transcript?.lang || 'en',
+            }))
+            : [{
+                text: typeof transcript?.content === 'string' ? transcript.content : '',
+                offset: 0,
+                duration: 0,
+                lang: transcript?.lang || 'en',
+            }];
+
+        return {
+            lang: transcript?.lang || 'en',
+            content: normalizedContent,
+        };
     } catch (error: any) {
         console.error('Transcript error:', error);
         throw new Error(
