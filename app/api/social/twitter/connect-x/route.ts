@@ -36,7 +36,7 @@ function buildOAuthHeader(method: string, baseUrl: string, params: Record<string
     const signingKey = `${percentEncode(consumerSecret)}&${tokenSecret ? percentEncode(tokenSecret) : ''}`
     const signature = crypto.createHmac('sha1', signingKey).update(baseString).digest('base64')
 
-    const headerParams = {
+    const headerParams: Record<string, string> = {
         ...oauthParams,
         oauth_signature: signature,
     }
