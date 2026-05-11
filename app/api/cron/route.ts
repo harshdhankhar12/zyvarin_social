@@ -9,37 +9,6 @@ const cronLockKey = 'cron:zyvarin:lock'
 const maintenanceCacheKey = 'cache:maintenance:active'
 
 
-async function checkCronTime() {
-  const now = new Date()
-  const minutes = now.getMinutes()
-  const hours = now.getHours()
-  const subject = `Cron Job Executed at ${now.toISOString()}`
-  const htmlContent = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-      <h2 style="color: #333;">Cron Job Execution Report</h2>
-      <p style="font-size: 16px; color: #555;">The cron job was executed at <strong>${now.toLocaleString()}</strong>.</p>
-      <p style="font-size: 16px; color: #555;">Current Server Time: ${now.toLocaleString()}</p>
-      <p style="font-size: 16px; color: #555;">Minutes: ${minutes}</p>
-      <p style="font-size: 16px; color: #555;">Hours: ${hours}</p>
-      <p style="font-size: 16px; color: #555;">This is a test email to verify that the cron job is running correctly.</p>
-    </div>
-  `
-  await sendMail({
-    to: process.env.ADMIN_EMAIL || '',
-    subject,
-    htmlContent
-  })
-
-
-  return {
-    success: true,
-  }
-
-
-}
-
-
-
 async function handlePendingTransactions() {
   const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
 
@@ -342,10 +311,6 @@ export async function GET(req: NextRequest) {
   try {
     const authHeader = req.headers.get('authorization')
     const cronSecret = process.env.CRON_SECRET
-    await checkCronTime().catch(error => {
-      console.error('Cron test email failed:', error)
-    })
-
     if (!cronSecret || authHeader !== `Bearer ${cronSecret} `) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
