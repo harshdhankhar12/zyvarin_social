@@ -1,4 +1,53 @@
 import prisma from '@/lib/prisma'
+import crypto from 'crypto'
+
+function percentEncode(str: string) {
+  return encodeURIComponent(str)
+    .replace(/!/g, '%21')
+    .replace(/'/g, '%27')
+    .replace(/\(/g, '%28')
+    .replace(/\)/g, '%29')
+    .replace(/\*/g, '%2A')
+}
+
+function generateNonce(length = 32) {
+  return crypto.randomBytes(Math.ceil(length / 2)).toString('hex')
+}
+
+function buildOAuthHeader(method: string, baseUrl: string, params: Record<string, string>, consumerKey: string, consumerSecret: string, token = '', tokenSecret = '') {
+  const parsed = new URL(baseUrl)
+  const normalizedBaseUrl = `${parsed.protocol}//${parsed.host}${parsed.pathname}`
+  const queryParams: Record<string, string> = {}
+  parsed.searchParams.forEach((value, key) => {
+    queryParams[key] = value
+  })
+  const oauthParams: Record<string, string> = {
+    oauth_consumer_key: consumerKey,
+    oauth_nonce: generateNonce(16),
+    oauth_signature_method: 'HMAC-SHA1',
+    oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
+    oauth_version: '1.0',
+  }
+  const allParams: Record<string, string> = { ...queryParams, ...oauthParams, ...params }
+  if (token) allParams['oauth_token'] = token
+  const encodedParams = Object.keys(allParams)
+    .sort()
+    .map(k => `${percentEncode(k)}=${percentEncode(allParams[k])}`)
+    .join('&')
+  const baseString = [method.toUpperCase(), percentEncode(normalizedBaseUrl), percentEncode(encodedParams)].join('&')
+  const signingKey = `${percentEncode(consumerSecret)}&${tokenSecret ? percentEncode(tokenSecret) : ''}`
+  const signature = crypto.createHmac('sha1', signingKey).update(baseString).digest('base64')
+  const headerParams: Record<string, string> = {
+    ...oauthParams,
+    oauth_signature: signature,
+  }
+  if (token) headerParams['oauth_token'] = token
+  return 'OAuth ' + Object.keys(headerParams)
+    .sort()
+    .map(k => `${percentEncode(k)}="${percentEncode(headerParams[k])}"`)
+    .join(', ')
+}
+
 
 interface PublishResult {
   success: boolean
@@ -112,53 +161,51 @@ async function publishToLinkedIn(post: any, accessToken: string): Promise<Publis
 
 async function publishToTwitter(post: any, accessToken: string): Promise<PublishResult> {
   try {
-    const now = Math.floor(Date.now() / 1000)
-    const isTokenExpired = post.socialProvider.expires_at && post.socialProvider.expires_at < now
-
-    let currentToken = accessToken
-
-    if (isTokenExpired && post.socialProvider.refresh_token) {
-      const refreshResult = await refreshTwitterToken(post.socialProvider)
-      if (!refreshResult.success) {
-        return refreshResult
-      }
-      currentToken = refreshResult.token!
-    }
-
-    const tweetData: any = { text: post.content }
-
+    const consumerKey = process.env.X_CLIENT_ID || ''
+    const consumerSecret = process.env.X_CLIENT_SECRET || ''
+    const mediaIds = []
     if (post.mediaUrls && post.mediaUrls.length > 0) {
-      const mediaIds = await uploadTwitterMedia(post.mediaUrls, currentToken)
-      if (mediaIds.length > 0) {
-        tweetData.media = { media_ids: mediaIds }
+      const ids = await uploadTwitterMedia(post.mediaUrls, accessToken, post.socialProvider.refresh_token)
+      mediaIds.push(...ids)
+    }
+    const postUrl = 'https://api.twitter.com/2/tweets'
+    const tweetPayload: any = {
+      text: post.content.trim()
+    }
+    if (mediaIds.length > 0) {
+      tweetPayload.media = {
+        media_ids: mediaIds
       }
     }
-
-    const response = await fetch('https://api.twitter.com/2/tweets', {
+    const tweetAuth = buildOAuthHeader('POST', postUrl, {}, consumerKey, consumerSecret, accessToken, post.socialProvider.refresh_token)
+    const response = await fetch(postUrl, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${currentToken}`,
+        'Authorization': tweetAuth,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(tweetData)
+      body: JSON.stringify(tweetPayload)
     })
-
-    if (!response.ok) {
-      const error = await response.json()
-      return { success: false, error: error.detail || 'Twitter API error' }
+    const tweetText = await response.text()
+    let tweetResult
+    try {
+      tweetResult = JSON.parse(tweetText)
+    } catch {
+      return { success: false, error: `Invalid JSON: ${tweetText}` }
     }
-
+    if (!response.ok) {
+      return { success: false, error: tweetText }
+    }
     await prisma.post.update({
       where: { id: post.id },
       data: {
         status: 'POSTED',
         postedAt: new Date(),
-        errorMessage: null
+        errorMessage: null,
+        platformPostId: tweetResult.data.id
       }
     })
-
     await incrementPostCount(post.socialProviderId, post.socialProvider.user.id)
-
     return { success: true }
   } catch (error: any) {
     return { success: false, error: error.message }
@@ -212,77 +259,36 @@ async function uploadImageToLinkedin(imageUrl: string, accessToken: string, prov
   }
 }
 
-async function refreshTwitterToken(provider: any): Promise<{ success: boolean; token?: string; error?: string }> {
-  try {
-    const refreshResponse = await fetch('https://api.twitter.com/2/oauth2/token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({
-        grant_type: 'refresh_token',
-        refresh_token: provider.refresh_token,
-        client_id: process.env.TWITTER_CLIENT_ID!
-      })
-    })
-
-    if (!refreshResponse.ok) {
-      await prisma.socialProvider.update({
-        where: { id: provider.id },
-        data: { isConnected: false, disconnectedAt: new Date() }
-      })
-      return { success: false, error: 'Token refresh failed' }
-    }
-
-    const tokens = await refreshResponse.json()
-    const expiresAt = Math.floor(Date.now() / 1000) + tokens.expires_in
-
-    await prisma.socialProvider.update({
-      where: { id: provider.id },
-      data: {
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
-        expires_at: expiresAt
-      }
-    })
-
-    return { success: true, token: tokens.access_token }
-  } catch (error: any) {
-    return { success: false, error: error.message }
-  }
-}
-
-async function uploadTwitterMedia(mediaUrls: string[], accessToken: string): Promise<string[]> {
+async function uploadTwitterMedia(mediaUrls: string[], accessToken: string, tokenSecret: string): Promise<string[]> {
+  const consumerKey = process.env.X_CLIENT_ID || ''
+  const consumerSecret = process.env.X_CLIENT_SECRET || ''
   const mediaIds: string[] = []
-
   for (const mediaUrl of mediaUrls) {
     try {
       const response = await fetch(mediaUrl)
       if (!response.ok) continue
-
       const imageBuffer = await response.arrayBuffer()
       const base64 = Buffer.from(imageBuffer).toString('base64')
-
-      const uploadResponse = await fetch('https://upload.twitter.com/1.1/media/upload.json', {
+      const uploadUrl = 'https://upload.twitter.com/1.1/media/upload.json'
+      const uploadAuth = buildOAuthHeader('POST', uploadUrl, {}, consumerKey, consumerSecret, accessToken, tokenSecret)
+      const uploadResponse = await fetch(uploadUrl, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${accessToken}`,
+          'Authorization': uploadAuth,
           'Content-Type': 'application/x-www-form-urlencoded'
         },
         body: new URLSearchParams({
           media_data: base64
         })
       })
-
       if (uploadResponse.ok) {
         const data = await uploadResponse.json()
         mediaIds.push(data.media_id_string)
       }
     } catch (error) {
-      console.error('Twitter media upload error:', error)
+      console.error(error)
     }
   }
-
   return mediaIds
 }
 

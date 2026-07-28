@@ -1,18 +1,8 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 import { Analytics } from "@vercel/analytics/next"
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"], 
-});
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://zyvarin.com"),
@@ -97,27 +87,27 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-          <>
-            <Script
-              strategy="afterInteractive"
-              src={`https://www.googletagmanager.com/gtag/js?id=G-51NY69XWVF`}
-            />
-            <Script
-              id="google-analytics"
-              strategy="afterInteractive"
-              dangerouslySetInnerHTML={{
-                __html: `
+        <>
+          <Script
+            strategy="afterInteractive"
+            src={`https://www.googletagmanager.com/gtag/js?id=G-51NY69XWVF`}
+          />
+          <Script
+            id="google-analytics"
+            strategy="afterInteractive"
+            dangerouslySetInnerHTML={{
+              __html: `
                   window.dataLayer = window.dataLayer || [];
                   function gtag(){dataLayer.push(arguments);}
                   gtag('js', new Date());
                   gtag('config', 'G-51NY69XWVF');
                 `,
-              }}
-            />
-          </>
+            }}
+          />
+        </>
       </head>
       <body cz-shortcut-listen="true"
-      className={`${geistSans.variable} ${geistMono.variable}`}>
+      >
         {children}
         <Analytics />
       </body>

@@ -97,8 +97,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(`${baseUrl}/dashboard/connect-accounts?error=platform_limit_reached`)
     }
 
-    const consumerKey = process.env.X_API_KEY || process.env.X_CLIENT_ID || ''
-    const consumerSecret = process.env.X_API_SECRET || process.env.X_CLIENT_SECRET || ''
+    const consumerKey = process.env.X_CLIENT_ID || ''
+    const consumerSecret = process.env.X_CLIENT_SECRET || ''
     if (!consumerKey || !consumerSecret) {
       return NextResponse.redirect(`${baseUrl}/dashboard/connect-accounts?error=twitter_missing_config`)
     }

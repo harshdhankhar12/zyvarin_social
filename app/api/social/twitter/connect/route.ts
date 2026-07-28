@@ -88,14 +88,12 @@ export async function GET(req: Request) {
       return NextResponse.redirect(`${baseUrl}/dashboard/connect-accounts?error=platform_limit_reached`)
     }
 
-    const consumerKey = process.env.X_API_KEY || process.env.X_CLIENT_ID || ''
-    const consumerSecret = process.env.X_API_SECRET || process.env.X_CLIENT_SECRET || ''
+    const consumerKey = process.env.X_CLIENT_ID || ''
+    const consumerSecret = process.env.X_CLIENT_SECRET || ''
     if (!consumerKey || !consumerSecret) {
       return NextResponse.redirect(`${baseUrl}/dashboard/connect-accounts?error=twitter_missing_config`)
     }
 
-    // OAuth 1.0a needs API Key/Secret (consumer key/secret), not OAuth2 client id.
-    // OAuth2 client ids usually contain colon segments like "xxx:1:ci".
     if (consumerKey.includes(':')) {
       return NextResponse.redirect(`${baseUrl}/dashboard/connect-accounts?error=twitter_wrong_keys`)
     }

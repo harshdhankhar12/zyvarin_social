@@ -33,13 +33,13 @@
     "jspdf": "^3.0.4",
     "jspdf-autotable": "^5.0.2",
     "lucide-react": "^0.555.0",
-    "next": "^16.0.7",
+    "next": "^16.2.10",
     "next-auth": "^4.24.13",
     "nodemailer": "^7.0.11",
     "pg": "^8.16.3",
     "razorpay": "^2.9.6",
-    "react": "^19.2.1",
-    "react-dom": "^19.2.1",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
     "react-markdown": "^10.1.0",
     "react-timezone-select": "^3.2.8",
     "recharts": "^3.5.1",
@@ -60,5 +60,13 @@
     "tailwindcss": "^3.4.18",
     "tsx": "^4.20.6",
     "typescript": "^5"
+  },
+  "allowScripts": {
+    "@prisma/client@6.19.1": true,
+    "@prisma/engines@6.19.1": true,
+    "core-js@3.47.0": true,
+    "esbuild@0.27.2": true,
+    "prisma@6.19.1": true,
+    "sharp@0.34.5": true
   }
 }

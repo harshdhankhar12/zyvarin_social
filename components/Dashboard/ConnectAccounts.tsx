@@ -153,7 +153,7 @@ const ConnectAccounts = ({
       color: 'text-black',
       bgColor: 'bg-slate-50',
       description: 'Real-time conversations',
-      isAvailable: true
+      isAvailable: false
     }, {
       id: 'pinterest',
       name: 'Pinterest',
